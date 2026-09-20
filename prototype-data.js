@@ -370,7 +370,7 @@
       { id: 1, title: '建议建立农产品产销信息跨单位共享机制', board: '建言献策', author: '山野微风', status: '已发布', risk: '低风险', body: '建议由合作指导处牵头建立按周更新的农产品供需清单，统一品类、数量、交付区域和有效期。', time: '09月11日 09:24' },
       { id: 2, title: '关于优化机关食堂晚餐供应时段的建议', board: '心声诉求', author: '一盏清茶', status: '已发布', risk: '需核验', body: '希望结合实际用餐数据适当调整晚餐时段。', time: '09月11日 08:47' },
       { id: 3, title: '县域冷链项目验收资料整理经验分享', board: '业务交流', author: '江城行者', status: '已发布', risk: '低风险', sensitiveHits: [], body: '分享县域冷链项目验收材料目录和常见退回原因。', time: '09月10日 11:06' },
-      { id: 15, title: '关于基层网点联系方式展示的意见', board: '心声诉求', author: '匿名用户', status: '待审核', risk: '个人信息', sensitiveHits: ['个人信息'], body: '建议完善基层网点联系方式展示规则，并注意保护个人信息。', time: '09月10日 09:10' },
+      { id: 15, title: '关于基层网点联系方式展示的意见', board: '心声诉求', author: '匿名用户', authorId: 'staff', publicationMode: 'anonymous', status: '待审核', risk: '个人信息', sensitiveHits: ['个人信息'], body: '建议完善基层网点联系方式展示规则，并注意保护个人信息。', time: '09月10日 09:10' },
       ...demoReviewPosts,
       ...flowPosts,
       ...mockPosts.slice(0, 13)
@@ -380,7 +380,9 @@
       ...flowAffairs,
       ...mockAffairs
     ],
-    comments: demoComments.map((item) => ({ ...item })), reports: demoReports.map((item) => ({ ...item })), notices: mockNotices.map((item) => ({ ...item })), banners: mockBanners.map((item) => ({ ...item })), rectifications: [],
+    comments: demoComments.map((item) => ({ ...item })), reports: demoReports.map((item) => ({ ...item })), notices: mockNotices.map((item) => ({ ...item })), banners: mockBanners.map((item) => ({ ...item })), traceRequests: [
+      { id: 'TR-202609-001', postId: 15, applicantId: 'admin', applicant: '王敏', department: '平台管理组', reason: '核查疑似个人信息发布来源，联系发帖人确认授权范围。', submittedAt: '2026-09-17 09:20', status: '待审核', viewCount: 0 }
+    ], rectifications: [],
     policies: [
       { id: 'policy-admin-1', title: '湖北省供销合作社系统农业社会化服务工作指引', category: '为农服务', department: '合作指导处', summary: '明确服务主体、服务内容、项目实施和台账管理要求。', body: '围绕农业社会化服务项目实施，统一服务流程、质量要求和资料归档口径。', status: '已发布', publishedAt: '2026-09-08' },
       { id: 'policy-admin-2', title: '基层社项目申报操作指引（2026 年版）', category: '项目申报', department: '经济发展处', summary: '梳理项目申报条件、材料清单、审核节点及反馈方式。', body: '申报单位应按年度通知准备申报表、实施方案、资金预算和必要证明材料。', status: '已发布', publishedAt: '2026-09-03' },
@@ -504,6 +506,12 @@
         if (obsolete >= 0) { raw.sensitiveWords.splice(obsolete, 1); wordsChanged = true; }
         if (wordsChanged) localStorage.setItem(key, JSON.stringify(raw));
         let dataChanged = false;
+        if (!Array.isArray(raw.traceRequests)) { raw.traceRequests = defaults.traceRequests; dataChanged = true; }
+        const seededPost = raw.posts.find((post) => post.id === 15 && post.title === '关于基层网点联系方式展示的意见' && post.author === '匿名用户' && post.body === '建议完善基层网点联系方式展示规则，并注意保护个人信息。');
+        if (seededPost && !seededPost.authorId) { seededPost.authorId = 'staff'; seededPost.publicationMode = 'anonymous'; dataChanged = true; }
+        for (const request of raw.traceRequests) {
+          if (!request.applicantId && request.id === 'TR-202609-001' && request.applicant === '王敏') { request.applicantId = 'admin'; dataChanged = true; }
+        }
         if (!Array.isArray(raw.banners)) { raw.banners = []; dataChanged = true; }
         if (!Array.isArray(raw.comments)) { raw.comments = []; dataChanged = true; }
         for (const comment of demoComments) {
