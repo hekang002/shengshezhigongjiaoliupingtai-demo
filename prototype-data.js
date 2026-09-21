@@ -121,6 +121,13 @@
     if (pendingAuditStatuses.has(post.status) || rejectedAuditStatuses.has(post.status) || post.status === '已隐藏') return '未发布';
     return '已发布';
   }
+  function deriveWorkflowPublishStatus(post, affair) {
+    if (!affair) return derivePublishStatus(post);
+    if (!['已反馈', '已办结'].includes(affair.status)) return '未发布';
+    if (affair.feedback === '私密回复' || post.status === '已办结私密') return '私密发布';
+    if (affair.feedback === '公开答复' || post.status === '已办结公开') return '已发布';
+    return derivePublishStatus(post);
+  }
   function deriveHandlingStatus(post, affair) {
     if (!processBoards.has(post.board)) return '不适用';
     if (!affair) return deriveAuditStatus(post) === '审核通过' ? '待分办' : '不适用';
@@ -149,10 +156,11 @@
     for (const post of data.posts || []) {
       const affair = (data.affairs || []).find((item) => String(item.postId) === String(post.id));
       const contentAuditStatus = deriveAuditStatus(post);
-      const publishStatus = derivePublishStatus(post);
+      const publishStatus = deriveWorkflowPublishStatus(post, affair);
       const handlingStatus = deriveHandlingStatus(post, affair);
       if (post.contentAuditStatus !== contentAuditStatus) { post.contentAuditStatus = contentAuditStatus; changed = true; }
       if (post.publishStatus !== publishStatus) { post.publishStatus = publishStatus; changed = true; }
+      if (affair && affair.publicationMode !== publishStatus) { affair.publicationMode = publishStatus; changed = true; }
       if (post.handlingStatus !== handlingStatus) { post.handlingStatus = handlingStatus; changed = true; }
     }
     return changed;
@@ -173,7 +181,7 @@
       const createdAt = post.reviewedAt || post.updatedAt || post.createdAt || post.time || '2026-09-14 09:00';
       const id = nextAffairNumber(data);
       data.affairs.unshift({
-        id, postId: post.id, title: post.title, sourceType: post.board, publicationMode: derivePublishStatus(post),
+        id, postId: post.id, title: post.title, sourceType: post.board, publicationMode: '未发布',
         auditStatus: '审核通过', reviewedAt: createdAt, createdAt, owner: '', initialOwner: '', co: '', assigneeId: '', assigneeName: '',
         deadline: '', priority: '一般', feedback: '', requirements: '', status: '待分办', assignmentState: '待分办',
         stage: '', progress: '', draft: '', extension: null, transfer: null, flowSnapshot: post.flowSnapshot || null,
@@ -279,6 +287,12 @@
   const mockPolicies = policyTitles.map((title, index) => ({ id: `POLICY-MOCK-${String(index + 1).padStart(3, '0')}`, title, category: ['为农服务', '项目管理', '综合改革', '内部管理'][index % 4], department: ['合作指导处', '经济发展处', '财务资产处', '信息中心'][index % 4], summary: `${title}的适用范围、办理流程、材料要求和责任分工摘要。`, body: `${title}用于统一相关工作的办理口径，明确申请条件、工作流程、材料清单、审核要求和归档规范。`, status: '已发布', publishedAt: `2026-09-${String(12 - index).padStart(2, '0')}` }));
   const questionTitles = ['基层社项目申报需要哪些前置条件？', '农业社会化服务台账应保留多久？', '跨部门共享数据需要履行什么程序？', '直属企业采购计划如何备案？', '职工培训报名后如何变更人员？', '冷链项目验收需准备哪些影像资料？', '供销品牌产品如何申请展示推荐？', '困难职工帮扶申请需要哪些证明？', '匿名发帖后平台是否可以查看身份？', '已公开答复存在错误如何申请更正？'];
   const mockQuestions = questionTitles.map((title, index) => ({ id: `QUESTION-MOCK-${String(index + 1).padStart(3, '0')}`, title, category: ['项目申报', '业务办理', '数据管理', '平台使用'][index % 4], department: ['经济发展处', '合作指导处', '信息中心', '平台管理组'][index % 4], answer: index < 7 ? `关于“${title}”，请按照现行制度准备相关材料，经所属部门审核后通过规定流程提交，具体以最新通知为准。` : '', status: index < 7 ? '已发布' : '待答复', submittedAt: `2026-09-${String(13 - index).padStart(2, '0')}`, answeredAt: index < 7 ? `2026-09-${String(14 - index).padStart(2, '0')}` : '' }));
+  const mockRectificationPublications = [
+    ['基层报销材料重复提交问题整改情况', '财务管理', '财务资产处', '针对线上审批后仍重复提交纸质材料的问题，已统一材料留存口径。', '线上审核通过后不再重复收取相同纸质附件，原始票据按归档要求留存。', '修订报销材料清单并完成经办人员培训。', '已完成', '已发布', '2026-09-12'],
+    ['项目申报结果反馈不及时问题整改进展', '项目申报', '经济发展处', '针对项目申报结果反馈节点不统一的问题，推进受理和反馈时限标准化。', '已明确受理、初审和结果反馈三个节点的办理时限。', '建立节点提醒和逾期督办机制，并按周检查执行情况。', '整改中', '已发布', '2026-09-10'],
+    ['职工培训学时登记口径不统一整改情况', '教育培训', '人事处', '统一直属单位培训学时认定、补录和查询规则。', '已发布统一登记表和学时认定说明。', '完成历史数据核对，设置季度抽查机制。', '已完成', '已发布', '2026-09-08'],
+    ['基层网点业务系统账号开通较慢整改进展', '信息化服务', '信息中心', '优化基层网点业务系统账号申请、审核和开通流程。', '已将平均开通时间由五个工作日压缩至两个工作日。', '上线标准申请模板，增加超时提醒和办理进度查询。', '整改中', '草稿', '']
+  ].map(([title, category, department, summary, result, measure, progress, status, publishedAt], index) => ({ id: `RECT-PUB-MOCK-${String(index + 1).padStart(3, '0')}`, title, category, department, summary, result, measure, progress, status, publishedAt }));
   const mockStaffQuestions = [
     { id: 'QUESTION-STAFF-DEMO-1', title: '项目申报材料能否使用电子签章？', category: '项目申报', department: '待分办', body: '近期准备基层社项目申报材料，想确认实施方案和承诺书是否可以使用电子签章提交。', answer: '', status: '待答复', submittedAt: '2026-09-14', answeredAt: '', authorId: 'staff', authorName: '张晓雨', anonymous: false, sourceType: '职工提问', needRectification: false, rectificationId: '' },
     { id: 'QUESTION-STAFF-DEMO-2', title: '培训报名后如何调整参训人员？', category: '教育培训', department: '人事处', body: '原报名人员临时无法参加，已更换一名同岗位同事，请问需要在哪个入口修改信息？', answer: '请在培训报名截止前联系组织处室管理员，由管理员在报名名单中完成替换；超过截止时间的，请提交情况说明后办理。', status: '答复中', submittedAt: '2026-09-12', answeredAt: '', authorId: 'staff', authorName: '张晓雨', anonymous: false, sourceType: '职工提问', needRectification: false, rectificationId: '' },
@@ -302,7 +316,7 @@
   const flowCases = [
     { id: 'POST-FLOW-I-01', board: '建言献策', title: '基层网点供需清单共享建议', body: '建议按地区和品类汇总基层网点的农产品供需清单，定期更新联系人和有效期。', status: '待审核', at: '2026-09-14 09:20' },
     { id: 'POST-FLOW-I-02', board: '建言献策', title: '项目申报材料共享范围建议', body: '建议将已公开的申报模板按项目类型整理，避免各单位反复索取历史表格。', status: '已驳回', reason: '请明确拟共享材料的来源和可公开范围，避免包含内部审批附件。', at: '2026-09-13 10:15' },
-    { id: 'POST-FLOW-I-03', board: '建言献策', title: '跨区域品牌推广活动协作建议', body: '建议联合市州社开展品牌推广，统一报名表、活动日程和效果统计口径。', status: '办理中', at: '2026-09-12 09:10', affair: { owner: '合作指导处', assigneeId: 'handler-cooperation', assigneeName: '周磊', deadline: '2026-09-25', stage: '制定措施', progress: '已与两个市州社沟通活动时间，正在拟定协作方案。' } },
+    { id: 'POST-FLOW-I-03', board: '建言献策', title: '跨区域品牌推广活动协作建议', body: '建议联合市州社开展品牌推广，统一报名表、活动日程和效果统计口径。', status: '办理中', at: '2026-09-12 09:10', affair: { owner: '合作指导处', assigneeId: 'handler-cooperation', assigneeName: '周磊', deadline: '2026-09-28', stage: '制定措施', progress: '已与两个市州社沟通活动时间，正在拟定协作方案。', extension: { status: '已批准', deadline: '2026-09-28', reason: '协同部门反馈需要补充办理时限。' } } },
     { id: 'POST-FLOW-I-04', board: '建言献策', title: '农产品采购需求更新频率建议', body: '建议采购需求每周更新一次，并标明需求变更时间，方便基层网点及时供货。', status: '办理中', at: '2026-09-11 08:30', affair: { owner: '经济发展处', assigneeId: 'handler', assigneeName: '陈凯', deadline: '2026-09-12', stage: '等待协同反馈', progress: '已收集采购部门意见，仍待确定统一更新频率。' } },
     { id: 'POST-FLOW-I-05', board: '建言献策', title: '社有企业经验案例库建设建议', body: '建议汇总社有企业的经营案例，并建立分类检索和年度更新机制。', status: '已处理-分办审核', at: '2026-09-10 11:40', affair: { owner: '合作指导处', assigneeId: 'handler-cooperation', assigneeName: '周磊', deadline: '2026-09-20', stage: '形成正式答复', progress: '案例目录和维护规则已完成。', draft: '已确定案例库首批收录范围，并安排专人按季度核对更新。' } },
     { id: 'POST-FLOW-I-06', board: '建言献策', title: '县域冷链验收影像归档建议', body: '建议为县域冷链验收制定影像资料目录，统一现场照片的命名和归档要求。', status: '已办结公开', at: '2026-09-09 14:00', affair: { owner: '经济发展处', assigneeId: 'handler', assigneeName: '陈凯', deadline: '2026-09-18', draft: '已发布冷链验收影像资料目录，明确拍摄节点、命名规则和归档责任。', feedback: '公开答复' } },
@@ -382,7 +396,7 @@
     ],
     comments: demoComments.map((item) => ({ ...item })), reports: demoReports.map((item) => ({ ...item })), notices: mockNotices.map((item) => ({ ...item })), banners: mockBanners.map((item) => ({ ...item })), traceRequests: [
       { id: 'TR-202609-001', postId: 15, applicantId: 'admin', applicant: '王敏', department: '平台管理组', reason: '核查疑似个人信息发布来源，联系发帖人确认授权范围。', submittedAt: '2026-09-17 09:20', status: '待审核', viewCount: 0 }
-    ], rectifications: [],
+    ], rectifications: [], rectificationPublications: mockRectificationPublications.map((item) => ({ ...item })),
     policies: [
       { id: 'policy-admin-1', title: '湖北省供销合作社系统农业社会化服务工作指引', category: '为农服务', department: '合作指导处', summary: '明确服务主体、服务内容、项目实施和台账管理要求。', body: '围绕农业社会化服务项目实施，统一服务流程、质量要求和资料归档口径。', status: '已发布', publishedAt: '2026-09-08' },
       { id: 'policy-admin-2', title: '基层社项目申报操作指引（2026 年版）', category: '项目申报', department: '经济发展处', summary: '梳理项目申报条件、材料清单、审核节点及反馈方式。', body: '申报单位应按年度通知准备申报表、实施方案、资金预算和必要证明材料。', status: '已发布', publishedAt: '2026-09-03' },
@@ -586,15 +600,22 @@
           if (!Object.hasOwn(affair, 'transfer')) { affair.transfer = null; dataChanged = true; }
           if (!Array.isArray(affair.events)) { affair.events = []; dataChanged = true; }
         }
-        for (const field of ['roles', 'menus', 'dictionaryTypes', 'dictionaryEntries', 'loginLogs', 'policies', 'questions', 'notices', 'banners', 'echoPublications']) if (!Array.isArray(raw[field])) { raw[field] = defaults[field]; dataChanged = true; }
+        const extensionDemo = raw.affairs.find((item) => item.id === 'SX-FLOW-I-03' && item.status === '办理中');
+        if (extensionDemo && !extensionDemo.extension) {
+          extensionDemo.extension = { status: '已批准', deadline: '2026-09-28', reason: '协同部门反馈需要补充办理时限。' };
+          extensionDemo.deadline = extensionDemo.extension.deadline;
+          dataChanged = true;
+        }
+        for (const field of ['roles', 'menus', 'dictionaryTypes', 'dictionaryEntries', 'loginLogs', 'policies', 'questions', 'rectificationPublications', 'notices', 'banners', 'echoPublications']) if (!Array.isArray(raw[field])) { raw[field] = defaults[field]; dataChanged = true; }
         for (const type of defaults.dictionaryTypes.filter((item) => item.id === 'dict-report-reason')) if (!raw.dictionaryTypes.some((item) => item.id === type.id || item.key === type.key)) { raw.dictionaryTypes.push({ ...type }); dataChanged = true; }
         for (const entry of defaults.dictionaryEntries.filter((item) => item.typeId === 'dict-report-reason')) if (!raw.dictionaryEntries.some((item) => item.id === entry.id)) { raw.dictionaryEntries.push({ ...entry }); dataChanged = true; }
-        const countsBefore = [raw.posts.length, raw.affairs.length, raw.notices.length, raw.policies.length, raw.questions.length, raw.banners.length, raw.echoPublications.length].join(':');
+        const countsBefore = [raw.posts.length, raw.affairs.length, raw.notices.length, raw.policies.length, raw.questions.length, raw.rectificationPublications.length, raw.banners.length, raw.echoPublications.length].join(':');
         appendUntil(raw.posts, mockPosts, (post) => post.deleted !== true && ['私密发布', '已发布', '已受理', '已隐藏'].includes(post.status));
         appendUntil(raw.notices, mockNotices, () => true);
         appendUntil(raw.policies, mockPolicies, () => true, 10);
         appendUntil(raw.questions, mockQuestions, () => true, 10);
         appendUntil(raw.questions, mockStaffQuestions, (item) => item.authorId === 'staff', mockStaffQuestions.length);
+        appendUntil(raw.rectificationPublications, mockRectificationPublications, () => true, mockRectificationPublications.length);
         appendUntil(raw.banners, mockBanners, () => true);
         appendUntil(raw.echoPublications, mockEchoPublications, () => true);
         appendUntil(raw.affairs, mockAffairs, () => true);
@@ -609,7 +630,7 @@
           const current = raw.posts.find((post) => post.id === candidate.id);
           if (current?.status === '已发布' && !raw.audit.some((event) => String(event.target) === String(current.id))) { current.status = '私密发布'; dataChanged = true; }
         }
-        if ([raw.posts.length, raw.affairs.length, raw.notices.length, raw.policies.length, raw.questions.length, raw.banners.length, raw.echoPublications.length].join(':') !== countsBefore) dataChanged = true;
+        if ([raw.posts.length, raw.affairs.length, raw.notices.length, raw.policies.length, raw.questions.length, raw.rectificationPublications.length, raw.banners.length, raw.echoPublications.length].join(':') !== countsBefore) dataChanged = true;
         if (reconcileProcessingPosts(raw)) dataChanged = true;
         for (const affair of raw.affairs) {
           const post = raw.posts.find((item) => String(item.id) === String(affair.postId));
