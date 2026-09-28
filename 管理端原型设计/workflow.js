@@ -64,6 +64,8 @@
   const emptyAssignmentFilter = () => ({ query: '', type: '', category: '', attribute: '', topic: '', dateFrom: '', dateTo: '' });
   let assignmentFilterStates = Object.fromEntries(['待处理', '处理中', '已回复'].map((tab) => [tab, emptyAssignmentFilter()]));
   const affairSelection = new Set();
+  let affairActiveTopicId = '';
+  let affairTopicQuery = '';
   const affairTopics = (data) => data.affairTopics || (data.affairTopics = []);
   const topicForAffair = (data, affairId) => affairTopics(data).find((topic) => (topic.affairIds || []).some((itemId) => String(itemId) === String(affairId)));
   const nextAffairTopicId = (data) => {
@@ -601,7 +603,7 @@
     const postForAffair = (affair) => data.posts.find((item) => String(item.id) === String(affair.postId));
     const affairType = (affair, post = postForAffair(affair)) => post?.board || affair.sourceType || (/^SX-MOCK-(\d+)$/.test(affair.id) ? (Number(affair.id.match(/(\d+)$/)?.[1]) % 2 ? '建言献策' : '心声诉求') : '未记录');
     const eligible = data.affairs.filter((affair) => ['建言献策', '心声诉求', '业务交流'].includes(affairType(affair)));
-    const sourceByTab = Object.fromEntries(['待处理', '处理中', '已回复'].map((tab) => [tab, eligible.filter((affair) => affair.status === tab)]));
+    const sourceByTab = Object.fromEntries(['待处理', '处理中', '已回复', '已归档'].map((tab) => [tab, eligible.filter((affair) => affair.status === tab)]));
     const assignmentStageTime = (affair) => assignmentTab === '已回复' ? affair.repliedAt : assignmentTab === '处理中' ? affair.classifiedAt || affair.updatedAt : affair.createdAt || affair.reviewedAt;
     const filters = assignmentFilterStates[assignmentTab] || emptyAssignmentFilter();
     const query = filters.query.toLocaleLowerCase();
@@ -624,31 +626,48 @@
     const tabs = contentTabs([
       ['待处理', '待处理', sourceByTab.待处理.length],
       ['处理中', '处理中', sourceByTab.处理中.length],
-      ['已回复', '已回复', sourceByTab.已回复.length]
+      ['已回复', '已回复', sourceByTab.已回复.length],
+      ['已归档', '已归档', sourceByTab.已归档.length]
     ], assignmentTab, 'assignment-tab', '事项处理');
-    const summary = `<div class="assignment-summary">${[
-      ['待处理', sourceByTab.待处理.length, 'inbox'], ['处理中', sourceByTab.处理中.length, 'messages-square'], ['已回复', sourceByTab.已回复.length, 'badge-check'], ['重点事项', eligible.filter((item) => item.isKey).length, 'star'], ['问题专题', affairTopics(data).length, 'layers-3']
-    ].map(([label, value, name]) => `<div><span>${icon(name)}${label}</span><strong>${value}</strong></div>`).join('')}</div>`;
-    const filterBar = `<form class="assignment-filters affair-workspace-filters" onsubmit="event.preventDefault();ManagementWorkflow.assignmentSearch()"><label><span>关键词</span><input class="input" id="wf-assignment-query" value="${safe(filters.query)}" placeholder="事项名称、编号、标签或专题"></label><label><span>来源类型</span><select class="select" id="wf-assignment-type"><option value="">全部类型</option>${['建言献策', '心声诉求', '业务交流'].map((value) => `<option ${filters.type === value ? 'selected' : ''}>${value}</option>`).join('')}</select></label><label><span>事项分类</span><select class="select" id="wf-assignment-category"><option value="">全部分类</option>${categories.map((value) => `<option ${filters.category === value ? 'selected' : ''}>${safe(value)}</option>`).join('')}</select></label><label><span>事项属性</span><select class="select" id="wf-assignment-attribute"><option value="">全部属性</option>${['重点事项', '一般事项'].map((value) => `<option ${filters.attribute === value ? 'selected' : ''}>${value}</option>`).join('')}</select></label><label><span>专题关联</span><select class="select" id="wf-assignment-topic"><option value="">全部事项</option>${['已关联专题', '未关联专题'].map((value) => `<option ${filters.topic === value ? 'selected' : ''}>${value}</option>`).join('')}</select></label><label><span>${assignmentTab === '待处理' ? '生成时间' : assignmentTab === '处理中' ? '标记时间' : '回复时间'}</span><div class="review-date-range"><input class="input" id="wf-assignment-from" type="date" value="${safe(filters.dateFrom)}"><em>至</em><input class="input" id="wf-assignment-to" type="date" value="${safe(filters.dateTo)}"></div></label><div class="assignment-filter-actions">${button('重置', 'assignment-reset', '')}<button class="btn btn-sm btn-primary" type="submit">${icon('search')}查询</button></div></form>`;
+    const processedFilters = assignmentTab === '待处理' ? '' : `<label><span>事项分类</span><select class="select" id="wf-assignment-category"><option value="">全部分类</option>${categories.map((value) => `<option ${filters.category === value ? 'selected' : ''}>${safe(value)}</option>`).join('')}</select></label><label><span>优先级</span><select class="select" id="wf-assignment-attribute"><option value="">全部优先级</option>${['重点事项', '一般事项'].map((value) => `<option ${filters.attribute === value ? 'selected' : ''}>${value}</option>`).join('')}</select></label><label><span>专题关联</span><select class="select" id="wf-assignment-topic"><option value="">全部事项</option>${['已关联专题', '未关联专题'].map((value) => `<option ${filters.topic === value ? 'selected' : ''}>${value}</option>`).join('')}</select></label>`;
+    const filterBar = `<form class="assignment-filters affair-workspace-filters" onsubmit="event.preventDefault();ManagementWorkflow.assignmentSearch()"><label><span>关键词</span><input class="input" id="wf-assignment-query" value="${safe(filters.query)}" placeholder="事项名称、编号、标签或专题"></label><label><span>来源类型</span><select class="select" id="wf-assignment-type"><option value="">全部类型</option>${['建言献策', '心声诉求', '业务交流'].map((value) => `<option ${filters.type === value ? 'selected' : ''}>${value}</option>`).join('')}</select></label>${processedFilters}<label><span>${assignmentTab === '待处理' ? '生成时间' : assignmentTab === '处理中' ? '标记时间' : '回复时间'}</span><div class="review-date-range"><input class="input" id="wf-assignment-from" type="date" value="${safe(filters.dateFrom)}"><em>至</em><input class="input" id="wf-assignment-to" type="date" value="${safe(filters.dateTo)}"></div></label><div class="assignment-filter-actions">${button('重置', 'assignment-reset', '')}<button class="btn btn-sm btn-primary" type="submit">${icon('search')}查询</button></div></form>`;
     const assignmentAction = (affair) => {
-      if (assignmentTab === '待处理') return button('处置事项', 'affair-classify', affair.id, 'primary');
-      if (assignmentTab === '处理中') return button('记录结论', 'affair-reply', affair.id, 'primary');
+      if (assignmentTab === '待处理') return button('处置事项', 'affair-classify', affair.id, 'primary') + button('归档', 'affair-archive', affair.id);
+      if (assignmentTab === '已归档') return button('详情', 'affair-view', affair.id) + button('还原', 'affair-unarchive', affair.id, 'primary');
+      if (assignmentTab === '处理中') return button('详情', 'affair-view', affair.id) + button('回复', 'affair-reply', affair.id, 'primary') + button('移动事项', 'affair-topic-join', affair.id);
       const published = (data.echoPublications || []).some((item) => String(item.affairId) === String(affair.id) && item.status === '已发布');
       return button('查看回复', 'affair-view', affair.id) + (published ? '<span class="badge green">已发布回音壁</span>' : button('发布到回音壁', 'echo-publish', affair.id, 'primary'));
     };
     const selectable = ['待处理', '处理中'].includes(assignmentTab);
-    const columns = [...(selectable ? ['<input type="checkbox" data-action="affair-select-visible" aria-label="选择当前列表">'] : []), '事项名称 / 编号', '来源类型', '事项分类', '事项属性', '关联专题', assignmentTab === '待处理' ? '生成时间' : assignmentTab === '处理中' ? '标记时间' : '回复时间', '操作'];
+    const columns = [...(selectable ? ['<input type="checkbox" data-action="affair-select-visible" aria-label="选择当前列表">'] : []), '事项名称 / 编号', '来源类型', ...(assignmentTab === '处理中' || assignmentTab === '已回复' ? ['事项分类', '优先级', '关联专题'] : []), ...(assignmentTab === '已归档' ? ['生成时间', '归档理由', '归档时间', '归档操作人'] : [assignmentTab === '待处理' ? '生成时间' : assignmentTab === '处理中' ? '标记时间' : '回复时间']), '操作'];
     const rows = filteredItems.map((affair) => {
       const post = postForAffair(affair);
       const topic = topicForAffair(data, affair.id);
       const attributes = [affair.isKey ? badgeFor('重点事项') : ''].filter(Boolean).join(' ') || '<span class="muted">一般事项</span>';
       const selector = selectable ? `<input type="checkbox" data-action="affair-select" data-id="${safe(affair.id)}" aria-label="选择 ${safe(affair.title)}" ${affairSelection.has(String(affair.id)) ? 'checked' : ''}>` : '';
       const topicCell = topic ? `<button type="button" class="text-link affair-topic-link" data-action="affair-topic-view" data-id="${safe(topic.id)}">${safe(topic.name)}</button>` : '<span class="muted">未关联</span>';
-      return `<tr>${selectable ? `<td>${selector}</td>` : ''}<td><strong>${safe(affair.title)}</strong><div class="td-sub">${safe(affair.id)}</div></td><td>${badgeFor(affairType(affair, post))}</td><td>${assignmentTab === '待处理' ? '<span class="muted">待分类</span>' : safe(affair.category || '待分类')}</td><td><div class="affair-attribute-cell">${attributes}</div></td><td>${topicCell}</td><td><strong>${safe(fullDateTime(assignmentStageTime(affair)))}</strong></td><td><div class="row-actions">${assignmentAction(affair)}</div></td></tr>`;
+      const processedFields = ['待处理', '已归档'].includes(assignmentTab) ? '' : `<td>${safe(affair.category || '待分类')}</td><td><div class="affair-attribute-cell">${attributes}</div></td><td>${topicCell}</td>`;
+      const archiveFields = assignmentTab === '已归档' ? `<td><strong>${safe(fullDateTime(affair.createdAt || affair.reviewedAt))}</strong></td><td>${safe(affair.archiveReason || '未记录')}</td><td><strong>${safe(fullDateTime(affair.archivedAt))}</strong></td><td>${safe(affair.archivedBy || '平台管理员')}</td>` : `<td><strong>${safe(fullDateTime(assignmentStageTime(affair)))}</strong></td>`;
+      return `<tr>${selectable ? `<td>${selector}</td>` : ''}<td><strong>${safe(affair.title)}</strong><div class="td-sub">${safe(affair.id)}</div></td><td>${badgeFor(affairType(affair, post))}</td>${processedFields}${archiveFields}<td><div class="row-actions">${assignmentAction(affair)}</div></td></tr>`;
     });
     const batchBar = selectable ? `<div class="affair-batch-toolbar"><span>已选择 <strong>${affairSelection.size}</strong> 项</span><div>${assignmentTab === '待处理' ? `${button('建立问题专题', 'affair-topic-create', '')}${button('加入已有专题', 'affair-topic-join', '')}` : ''}${assignmentTab === '处理中' ? button('统一回复', 'affair-batch-reply', '', 'primary') : ''}</div></div>` : '';
-    const body = `<div class="section-title"><h2>${assignmentTab}事项</h2><span class="badge">${filteredItems.length} 项</span></div>${batchBar}<div class="assignment-table affair-workspace-table">${list(columns, rows)}</div>`;
-    return heading('事项处理', '管理人员处置待处理事项、记录线下讨论结论，并对同类事项统一回复。') + summary + tabs + filterBar + body;
+    let body;
+    if (assignmentTab === '处理中') {
+      const rowById = new Map(filteredItems.map((affair, index) => [String(affair.id), rows[index]]));
+      const grouped = affairTopics(data).map((topic) => ({ topic, items: filteredItems.filter((affair) => (topic.affairIds || []).some((itemId) => String(itemId) === String(affair.id))) })).filter((group) => group.items.length);
+      const activeGroup = affairActiveTopicId === '__ungrouped__' ? null : (grouped.find(({ topic }) => String(topic.id) === String(affairActiveTopicId)) || grouped[0]);
+      if (activeGroup) affairActiveTopicId = activeGroup.topic.id;
+      const topicSearch = `<form class="affair-topic-search" onsubmit="event.preventDefault();ManagementWorkflow.affairTopicSearch()"><input class="input" id="wf-affair-topic-query" value="${safe(affairTopicQuery)}" placeholder="搜索专题名称或事项"><button class="icon-btn" type="submit" title="搜索">${icon('search')}</button></form>`;
+      const topicQueue = grouped.filter(({ topic, items }) => !affairTopicQuery || `${topic.name} ${items.map((item) => item.title).join(' ')}`.toLocaleLowerCase().includes(affairTopicQuery.toLocaleLowerCase())).map(({ topic, items }) => `<button type="button" class="affair-topic-queue-item ${String(topic.id) === String(affairActiveTopicId) ? 'active' : ''}" data-action="affair-topic-select" data-id="${safe(topic.id)}"><strong>${safe(topic.name)}</strong><span>${items.length} 项关联事项</span><small>${safe(topic.updatedAt || topic.createdAt || '未更新')}</small></button>`).join('');
+      const groupedIds = new Set(grouped.flatMap((group) => group.items.map((item) => String(item.id))));
+      const ungrouped = filteredItems.filter((item) => !groupedIds.has(String(item.id)));
+      const ungroupedMarkup = ungrouped.length ? `<button type="button" class="affair-topic-queue-item is-ungrouped ${affairActiveTopicId === '__ungrouped__' ? 'active' : ''}" data-action="affair-topic-select" data-id="__ungrouped__"><strong>未关联专题</strong><span>${ungrouped.length} 项待归组</span><small>可建立专题或直接处置</small></button>` : '';
+      const detail = activeGroup ? `<section class="affair-topic-workspace"><header><div><span>当前专题</span><h3>${safe(activeGroup.topic.name)}</h3><p>${safe(activeGroup.topic.summary || '未填写问题概述')}</p></div><div><span>${activeGroup.items.length} 项关联事项</span><button type="button" class="btn btn-sm btn-primary" data-action="affair-topic-reply" data-id="${safe(activeGroup.topic.id)}">统一回复</button></div></header>${filterBar}${batchBar}<div class="assignment-table affair-workspace-table">${list(columns, activeGroup.items.map((item) => rowById.get(String(item.id))))}</div></section>` : ungrouped.length ? `<section class="affair-topic-workspace">${filterBar}${batchBar}<div class="assignment-table affair-workspace-table">${list(columns, ungrouped.map((item) => rowById.get(String(item.id))))}</div></section>` : '<section class="affair-topic-workspace"><div class="empty">暂无可展示的专题或待归组事项</div></section>';
+      body = `<div class="section-title"><h2>${assignmentTab}事项</h2><span class="badge">${filteredItems.length} 项 · ${grouped.length} 个专题</span></div><div class="affair-topic-workbench"><aside class="affair-topic-queue"><header><strong>问题专题</strong><span>${grouped.length} 个</span></header>${topicSearch}${topicQueue}${ungroupedMarkup || '<p class="empty">暂无专题</p>'}</aside>${detail}</div>`;
+    } else {
+      body = `<div class="section-title"><h2>${assignmentTab}事项</h2><span class="badge">${filteredItems.length} 项</span></div>${filterBar}${batchBar}<div class="assignment-table affair-workspace-table">${list(columns, rows)}</div>`;
+    }
+    return heading('事项处理', '管理人员处置待处理事项、记录线下讨论结论，并对同类事项统一回复。') + tabs + body;
   }
   function handlerDispatch() {
     if (!['platform', 'dispatch'].includes(state.role)) return heading('事项处理', '当前角色无权处理事项。');
@@ -1248,13 +1267,15 @@
       const actions = button('关闭', 'close', '') + (processing.length ? button(`统一回复 ${processing.length} 项`, 'affair-topic-reply', topic.id, 'primary') : '');
       return modal(`问题专题 · ${topic.id}`, `<div class="affair-topic-detail-layout">${meta}${linkedList}</div>`, actions).replace('<section class="modal"', '<section class="modal affair-action-modal affair-topic-detail-modal"');
     }
+    if (type === 'affair-archive' && affair) return modal('归档事项 · ' + affair.id, `<div class="notice"><strong>${safe(affair.title)}</strong><p>归档后事项将移入“已归档”，仅保留查询和追溯记录。</p></div>${textarea('归档理由', 'affair-archive-reason')}`, button('取消', 'close', '') + button('确认归档', 'affair-archive-save', id, 'primary'));
     if (type === 'affair-classify' && affair) {
       if (affair.status !== '待处理') return modal('事项状态已变化', '<p>该事项已不在待处理队列，请刷新列表后查看。</p>', button('关闭', 'close', ''));
       const source = data.posts.find((item) => String(item.id) === String(affair.postId));
       const categories = ['改进建议', '服务诉求', '政策咨询', '业务协同', '其他'];
-      const sourcePanel = `<article class="affair-source-panel"><header><span>${badgeFor(source?.board || affair.sourceType || '未记录')}</span><h3>${safe(affair.title)}</h3><p>${safe(affair.id)} · ${safe(source?.author || '匿名用户')} · ${safe(fullDateTime(source?.time || affair.createdAt))}</p></header><section><h4>事项内容</h4><p>${safe(source?.body || '暂无来源内容')}</p></section></article>`;
-      const fields = `<section class="affair-action-panel"><header><span>事项处置</span><h3>确定事项分类与处理属性</h3><p>根据正文核心诉求完成分类、标签和重点属性设置；来源栏目仅作为参考。</p></header>${choose('事项分类', 'affair-category', ['请选择事项分类', ...categories], '请选择事项分类')}${input('主题标签（使用逗号分隔）', 'affair-tags', (affair.topicTags || []).join('，'))}<div class="affair-checks"><label><input type="checkbox" id="wf-affair-key" ${affair.isKey ? 'checked' : ''}><span>重点事项</span></label></div>${textarea('内部备注', 'affair-note', affair.internalNote || '')}</section>`;
-      return modal(`处置事项 · ${affair.id}`, `<div class="affair-action-layout">${sourcePanel}${fields}</div>`, button('取消', 'close', '') + button('保存并进入处理中', 'affair-classify-save', affair.id, 'primary')).replace('<section class="modal"', '<section class="modal affair-action-modal"');
+      const sourcePanel = `<article class="affair-source-panel"><header><span>${badgeFor(source?.board || affair.sourceType || '未记录')}</span><h3>${safe(affair.title)}</h3><p>事项编号 ${safe(affair.id)} · ${safe(source?.author || '匿名用户')} · ${safe(fullDateTime(source?.time || affair.createdAt))}</p></header><section><h4>用户诉求</h4><p>${safe(source?.body || '暂无来源内容')}</p></section></article>`;
+      const priority = affair.priority || (affair.isKey ? '重点' : '一般');
+      const fields = `<section class="affair-action-panel"><header><span>处置设置</span><h3>完成分类与优先级设置</h3><p>保存后事项进入“处理中”，用于线下讨论、记录结论和统一回复。</p></header>${choose('事项分类', 'affair-category', ['请选择事项分类', ...categories], '请选择事项分类')}${choose('优先级', 'affair-priority', ['一般', '重点', '紧急'], priority)}${input('问题标签', 'affair-tags', (affair.topicTags || []).join('，'))}<p class="field-help">用于处理中列表检索、人工筛选和专题归组。</p>${textarea('处置备注', 'affair-note', affair.internalNote || '')}<p class="affair-action-hint">事项分类用于后续筛选统计；优先级用于安排处理顺序。</p></section>`;
+      return modal('处置事项', `<div class="affair-action-layout">${sourcePanel}${fields}</div>`, button('取消', 'close', '') + button('加入专题', 'affair-topic-join', affair.id) + button('保存并进入处理中', 'affair-classify-save', affair.id, 'primary')).replace('<section class="modal"', '<section class="modal affair-action-modal"');
     }
     if (type === 'affair-reply' || type === 'affair-batch-reply') {
       const selectedIds = [...new Set(String(id).split(',').map((value) => value.trim()).filter(Boolean))];
@@ -1262,7 +1283,7 @@
       if (!selected.length || selected.length !== selectedIds.length) return modal('事项状态已变化', '<p>所选事项中存在不可回复的数据，请关闭后重新选择。</p>', button('关闭', 'close', ''));
       const batch = selected.length > 1;
       const itemList = `<div class="affair-reply-selection"><header><span>${batch ? '统一回复事项' : '当前事项'}</span><strong>${selected.length} 项</strong></header>${selected.map((item) => `<div><span>${badgeFor(item.category || '待分类')}</span><p><strong>${safe(item.title)}</strong><small>${safe(item.id)}</small></p></div>`).join('')}</div>`;
-      const replyForm = `<section class="affair-reply-form">${textarea('讨论结论', 'affair-discussion-conclusion', batch ? '' : selected[0].discussionConclusion || '')}${textarea(batch ? '统一回复内容' : '回复内容', 'affair-reply-body', batch ? '' : selected[0].draft || '')}<p class="muted">系统不管理会议过程。录入线下讨论结论后发送回复，事项直接进入“已回复”；是否发布到回音壁需另行操作。</p></section>`;
+      const replyForm = `<section class="affair-reply-form">${textarea(batch ? '统一回复内容' : '回复内容', 'affair-reply-body', batch ? '' : selected[0].draft || '')}<p class="muted">回复后事项直接进入“已回复”；是否发布到回音壁需另行操作。</p></section>`;
       const actions = button('取消', 'close', '') + (!batch ? button('保存结论与草稿', 'affair-reply-draft', selected[0].id) : '') + button(batch ? '确认统一回复' : '发送回复', 'affair-reply-send', selectedIds.join(','), 'primary');
       return modal(batch ? '统一回复' : `记录结论并回复 · ${selected[0].id}`, `${itemList}${replyForm}`, actions).replace('<section class="modal"', '<section class="modal affair-action-modal affair-reply-modal"');
     }
@@ -1272,7 +1293,10 @@
       const linkedTopic = topicForAffair(data, affair.id);
       const published = (data.echoPublications || []).some((item) => String(item.affairId) === String(affair.id) && item.status === '已发布');
       const sourcePanel = `<article class="affair-source-panel"><header><span>${badgeFor(source?.board || affair.sourceType || '未记录')} ${badgeFor(affair.status)}</span><h3>${safe(affair.title)}</h3><p>${safe(affair.id)} · ${safe(source?.author || '匿名用户')} · ${safe(fullDateTime(source?.time || affair.createdAt))}</p></header><section><h4>事项内容</h4><p>${safe(source?.body || '暂无来源内容')}</p></section></article>`;
-      const detailPanel = `<section class="affair-action-panel affair-view-panel"><header><span>处理结果</span><h3>${safe(affair.category || '未分类')}</h3><p>${safe((affair.topicTags || []).join('、') || '未设置主题标签')}</p></header><dl><dt>事项属性</dt><dd>${attributes.map((item) => badgeFor(item)).join(' ') || '一般事项'}</dd><dt>关联专题</dt><dd>${linkedTopic ? `<button type="button" class="text-link" data-action="affair-topic-view" data-id="${safe(linkedTopic.id)}">${safe(linkedTopic.name)}</button>` : '未关联'}</dd><dt>回复人</dt><dd>${safe(affair.repliedBy || '未记录')}</dd><dt>回复时间</dt><dd>${safe(fullDateTime(affair.repliedAt))}</dd><dt>内部备注</dt><dd>${safe(affair.internalNote || '无')}</dd><dt>回音壁</dt><dd>${published ? badgeFor('已发布') : '未发布'}</dd></dl><section><h4>讨论结论</h4><p>${safe(affair.discussionConclusion || '未记录讨论结论')}</p></section><section><h4>回复内容</h4><p>${safe(affair.draft || '暂无回复内容')}</p></section></section>`;
+      const replied = affair.status === '已回复' && Boolean(affair.draft);
+      const replyMeta = replied ? `<dt>回复人</dt><dd>${safe(affair.repliedBy || currentAccount().name || '平台管理员')}</dd><dt>回复时间</dt><dd>${safe(fullDateTime(affair.repliedAt))}</dd><dt>回音壁</dt><dd>${published ? badgeFor('已发布') : '未发布'}</dd>` : '';
+      const replyContent = replied ? `<section><h4>回复内容</h4><p>${safe(affair.draft)}</p></section>` : '<p class="muted">当前事项尚未回复。</p>';
+      const detailPanel = `<section class="affair-action-panel affair-view-panel"><header><span>事项信息</span><h3>${safe(affair.category || '未分类')}</h3><p>${safe((affair.topicTags || []).join('、') || '未设置主题标签')}</p></header><dl><dt>事项属性</dt><dd>${attributes.map((item) => badgeFor(item)).join(' ') || '一般事项'}</dd><dt>关联专题</dt><dd>${linkedTopic ? `<button type="button" class="text-link" data-action="affair-topic-view" data-id="${safe(linkedTopic.id)}">${safe(linkedTopic.name)}</button>` : '未关联'}</dd><dt>内部备注</dt><dd>${safe(affair.internalNote || '无')}</dd>${replyMeta}</dl>${replyContent}</section>`;
       const actions = button('关闭', 'close', '') + (affair.status === '已回复' && !published ? button('发布到回音壁', 'echo-publish', affair.id, 'primary') : '');
       return modal(`事项详情 · ${affair.id}`, `<div class="affair-action-layout">${sourcePanel}${detailPanel}</div>`, actions).replace('<section class="modal"', '<section class="modal affair-action-modal"');
     }
@@ -1508,7 +1532,9 @@
     if (action === 'report-review-reset') { reportReviewFilters = { query: '', category: '', dateFrom: '', dateTo: '' }; return render(); }
     if (action === 'report-group-decision-cancel') { state.reportDecision = null; state.modal = { type: 'report-group-detail', id }; return render(); }
     if (action === 'report-group-confirm' || action === 'report-group-dismiss') { state.reportDecision = action; state.modal = { type: 'report-group-decision', id }; return render(); }
-    if (action === 'assignment-tab') { assignmentTab = ['待处理', '处理中', '已回复'].includes(id) ? id : '待处理'; affairSelection.clear(); return render(); }
+    if (action === 'affair-archive-save') { const data = db(), affair = data.affairs.find((item) => String(item.id) === String(id)), reason = readField('affair-archive-reason'); if (!affair || !reason) return showToast('请填写归档理由'); affair.archiveReason = reason; affair.archivedAt = time(); affair.archivedBy = currentAccount().name || '平台管理员'; affair.status = '已归档'; affair.assignmentState = '已归档'; data.audit.unshift({ action: '事项归档', target: affair.id, detail: reason, role: roleInfo[state.role].label, at: affair.archivedAt }); PrototypeData.save(data); closeModal(); return showToast('事项已归档'); }
+    if (action === 'affair-unarchive') { const data = db(), affair = data.affairs.find((item) => String(item.id) === String(id)); if (!affair || affair.status !== '已归档') return showToast('该事项当前不可还原'); affair.status = '待处理'; affair.assignmentState = '待处理'; affair.events = [...(affair.events || []), { text: '事项已从归档中还原，返回待处理', at: time() }]; data.audit.unshift({ action: '事项还原', target: affair.id, detail: '还原至待处理', role: roleInfo[state.role].label, at: time() }); PrototypeData.save(data); return showToast('事项已还原至待处理'); }
+    if (action === 'assignment-tab') { assignmentTab = ['待处理', '处理中', '已回复', '已归档'].includes(id) ? id : '待处理'; affairSelection.clear(); return render(); }
     if (action === 'assignment-reset') { assignmentFilterStates[assignmentTab] = emptyAssignmentFilter(); affairSelection.clear(); return render(); }
     if (action === 'affair-select') { affairSelection.has(id) ? affairSelection.delete(id) : affairSelection.add(id); return render(); }
     if (action === 'affair-select-visible') {
@@ -1530,7 +1556,7 @@
       return render();
     }
     if (action === 'affair-topic-join') {
-      const selected = [...affairSelection].filter((affairId) => db().affairs.some((item) => String(item.id) === affairId && ['待处理', '处理中'].includes(item.status)));
+      const selected = (id ? [String(id)] : [...affairSelection]).filter((affairId) => db().affairs.some((item) => String(item.id) === affairId && ['待处理', '处理中'].includes(item.status)));
       if (!selected.length) return showToast('请先选择需要加入专题的事项');
       state.modal = { type: 'affair-topic-join', id: selected.join(',') };
       return render();
@@ -1542,6 +1568,7 @@
       state.modal = { type: 'affair-batch-reply', id: selected.join(',') };
       return render();
     }
+    if (action === 'affair-topic-select') { affairActiveTopicId = id; return render(); }
     if (action === 'handler-message-tab') { handlerMessageType = id; return render(); }
     if (action === 'extension-review-tab') { extensionReviewTab = ['全部申请', '待审核', '已通过', '已驳回'].includes(id) ? id : '待审核'; return render(); }
     if (action === 'extension-review-reset') { extensionReviewFilters = { query: '', owner: '' }; return render(); }
@@ -1604,7 +1631,7 @@
     }
     if (action === 'extension-review-back') { state.modal = { type: 'extension-review-detail', id }; return render(); }
     if (action === 'extension-review-approve' || action === 'extension-review-reject') { state.modal = { type: action, id }; return render(); }
-    if (['post-detail', 'content-review-detail', 'content-review-batch-return', 'ledger-post-delete', 'comment-batch-detail', 'comment-detail', 'report-detail', 'report-group-detail', 'affair-classify', 'affair-reply', 'affair-view', 'affair-topic-view', 'assign-form', 'assignment-skip', 'affair-detail', 'affair-transfer', 'affair-contact', 'affair-urge', 'extension-review-detail', 'rectify-new', 'rectify-form', 'notice-view', 'notice-new', 'notice-edit', 'notice-delete', 'policy-new', 'policy-edit', 'policy-delete', 'question-answer', 'rectification-publication-new', 'rectification-publication-edit', 'rectification-publication-delete', 'echo-publish', 'echo-view', 'account-review', 'account-decision-reject', 'account-decision-approve', 'board-new', 'board-edit', 'board-delete', 'word-new', 'word-edit', 'word-import', 'word-delete', 'banner-new', 'banner-edit', 'banner-preview', 'banner-delete'].includes(action)) { if (action === 'post-detail') state.postDetailTab = 'content'; state.modal = { type: action, id }; return render(); }
+    if (['post-detail', 'content-review-detail', 'content-review-batch-return', 'ledger-post-delete', 'comment-batch-detail', 'comment-detail', 'report-detail', 'report-group-detail', 'affair-classify', 'affair-archive', 'affair-reply', 'affair-view', 'affair-topic-view', 'assign-form', 'assignment-skip', 'affair-detail', 'affair-transfer', 'affair-contact', 'affair-urge', 'extension-review-detail', 'rectify-new', 'rectify-form', 'notice-view', 'notice-new', 'notice-edit', 'notice-delete', 'policy-new', 'policy-edit', 'policy-delete', 'question-answer', 'rectification-publication-new', 'rectification-publication-edit', 'rectification-publication-delete', 'echo-publish', 'echo-view', 'account-review', 'account-decision-reject', 'account-decision-approve', 'board-new', 'board-edit', 'board-delete', 'word-new', 'word-edit', 'word-import', 'word-delete', 'banner-new', 'banner-edit', 'banner-preview', 'banner-delete'].includes(action)) { if (action === 'post-detail') state.postDetailTab = 'content'; state.modal = { type: action, id }; return render(); }
     if (action.startsWith('ledger-post-')) {
       if (!canManageLedger()) return showToast('当前角色无权管理发帖台账');
       const data = db(), post = data.posts.find((item) => String(item.id) === String(id));
@@ -1787,7 +1814,8 @@
       Object.assign(affair, {
         category,
         topicTags: [...new Set(tags)],
-        isKey: Boolean(document.getElementById('wf-affair-key')?.checked),
+        priority: readField('affair-priority') || '一般',
+        isKey: ['重点', '紧急'].includes(readField('affair-priority')),
         isCommon: false,
         internalNote: readField('affair-note'),
         status: '处理中',
@@ -1806,9 +1834,9 @@
       const draft = readField('affair-reply-body');
       const discussionConclusion = readField('affair-discussion-conclusion');
       if (!affair || affair.status !== '处理中') return showToast('该事项当前不可保存回复草稿');
-      if (!discussionConclusion && !draft) return showToast('请填写讨论结论或回复内容');
+      if (!draft) return showToast('请填写回复内容');
       affair.draft = draft;
-      affair.discussionConclusion = discussionConclusion;
+      affair.discussionConclusion = '';
       affair.feedback = '公开答复';
       affair.events = [...(affair.events || []), { text: '保存讨论结论与回复草稿', at: time() }];
       data.audit.unshift({ action: '事项处理草稿', target: affair.id, detail: affair.title, role: roleInfo[state.role].label, at: time() });
@@ -1820,7 +1848,6 @@
       const reply = readField('affair-reply-body');
       const discussionConclusion = readField('affair-discussion-conclusion');
       const feedback = '公开答复';
-      if (!discussionConclusion) return showToast('请填写讨论结论');
       if (!reply) return showToast('请填写回复内容');
       const data = db();
       const affairs = selectedIds.map((affairId) => data.affairs.find((item) => String(item.id) === affairId));
@@ -2097,6 +2124,7 @@
     echoSearch() { echoFilters = { query: readField('echo-query'), scope: readField('echo-scope') }; render(); },
     orgSearch() { orgUi.filters = { query: readField('org-query'), status: readField('org-status'), parent: orgUi.advanced ? readField('org-parent-filter') : '' }; orgUi.menuId = null; render(); },
     assignmentSearch() { assignmentFilterStates[assignmentTab] = { query: readField('assignment-query'), type: readField('assignment-type'), category: readField('assignment-category'), attribute: readField('assignment-attribute'), topic: readField('assignment-topic'), dateFrom: readField('assignment-from'), dateTo: readField('assignment-to') }; affairSelection.clear(); render(); },
+    affairTopicSearch() { affairTopicQuery = readField('affair-topic-query'); render(); },
     closedAnswersSearch() { closedAnswersFilters = { query: readField('closed-query'), type: readField('closed-type'), owner: readField('closed-owner'), reply: readField('closed-reply'), dateFrom: readField('closed-from'), dateTo: readField('closed-to') }; render(); },
     handlerSearch() { handlerFilters = { ...handlerFilters, query: readField('handler-query'), status: readField('handler-status'), priority: readField('handler-priority'), deadline: readField('handler-deadline'), type: readField('handler-type'), deadlineFrom: readField('handler-deadlineFrom'), deadlineTo: readField('handler-deadlineTo') }; render(); },
     handlerWorkspaceSearch() { handlerWorkspaceQuery = readField('handler-workspace-query'); handlerWorkspaceDeadline = readField('handler-workspace-deadline'); handlerActiveAffairId = ''; render(); },

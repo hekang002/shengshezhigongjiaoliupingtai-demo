@@ -496,10 +496,43 @@
       { id: 'org-jingzhou', parentId: 'org-cities', name: '荆州市供销合作社', sort: 2, visible: true, status: '正常', createdAt: '2026-09-10 09:28' }
     ]
   });
+  function applyDemoScenario(data, scenario) {
+    const mode = ['mixed', 'pending', 'processing', 'replied'].includes(scenario) ? scenario : 'mixed';
+    if (mode === 'mixed') return data;
+    data.affairs.forEach((affair, index) => {
+      if (mode === 'pending') {
+        Object.assign(affair, { status: '待处理', assignmentState: '待处理', category: '', topicTags: [], isKey: false, repliedAt: '', draft: '' });
+      } else if (mode === 'processing') {
+        Object.assign(affair, { status: '处理中', assignmentState: '处理中', category: affair.category || ['改进建议', '服务诉求', '政策咨询'][index % 3], classifiedAt: affair.classifiedAt || affair.updatedAt || affair.createdAt, isKey: index % 4 === 0 });
+      } else if (mode === 'replied') {
+        Object.assign(affair, { status: '已回复', assignmentState: '已回复', category: affair.category || '改进建议', repliedAt: affair.repliedAt || affair.updatedAt || affair.createdAt, draft: affair.draft || '感谢您的反馈，管理人员已完成集中研究并形成统一回复。' });
+      }
+    });
+    const processingIds = data.affairs.filter((affair) => affair.status === '处理中').map((affair) => affair.id);
+    if (!data.affairTopics?.length && processingIds.length) {
+      const names = ['基层服务优化', '职工生活保障', '项目申报协同', '业务流程改进', '信息公开咨询'];
+      data.affairTopics = names.map((name, index) => ({ id: `ZT-DEMO-${index + 1}`, name, summary: `围绕${name}集中整理相关事项并统一回复。`, affairIds: processingIds.filter((_, itemIndex) => itemIndex % names.length === index), discussionConclusion: '', createdBy: '平台管理员', createdAt: '2026-09-18 09:00', updatedAt: '2026-09-18 09:00' })).filter((topic) => topic.affairIds.length);
+    }
+    if (!data.affairs.some((affair) => affair.status === '已归档')) {
+      const archiveSeeds = data.affairs.filter((affair) => affair.status !== '已归档').slice(0, 10);
+      data.affairs.push(...archiveSeeds.map((affair, index) => ({ ...affair, id: `SX-ARCHIVE-${String(index + 1).padStart(3, '0')}`, status: '已归档', assignmentState: '已归档', archiveReason: ['重复事项', '内容不属于平台办理范围', '已通过其他渠道处理', '信息不完整暂不办理'][index % 4], archivedAt: `2026-09-${String(18 - index).padStart(2, '0')} 15:30`, archivedBy: '平台管理员', events: [...(affair.events || []), { text: '演示数据：事项已归档', at: `2026-09-${String(18 - index).padStart(2, '0')} 15:30` }] })));
+    }
+    if (mode === 'processing') data.affairTopics = (data.affairTopics || []).slice(0, 5);
+    data.__demoScenario = mode;
+    return data;
+  }
   function read() {
+    const requestedScenario = new URLSearchParams(window.location.search).get('demo') || 'mixed';
     try {
       const raw = JSON.parse(localStorage.getItem(key));
       if (raw && Array.isArray(raw.posts) && Array.isArray(raw.affairs) && Array.isArray(raw.audit)) {
+        const hasAssignmentStates = raw.affairs.some((affair) => ['待处理', '处理中', '已回复'].includes(affair.status));
+        if (requestedScenario && (raw.__demoScenario !== requestedScenario || !hasAssignmentStates)) {
+          const scenarioData = applyDemoScenario(initial(), requestedScenario);
+          reconcileProcessingPosts(scenarioData);
+          localStorage.setItem(key, JSON.stringify(scenarioData));
+          return scenarioData;
+        }
         const defaults = initial();
         if (!Array.isArray(raw.boards)) raw.boards = defaults.boards;
         const wordsMissing = !Array.isArray(raw.sensitiveWords);
@@ -716,13 +749,17 @@
           ensureEngagement(publication);
           if (JSON.stringify(publication.engagement) !== before) dataChanged = true;
         }
+        const topicsBefore = JSON.stringify(raw.affairTopics || []);
+        applyDemoScenario(raw, raw.__demoScenario || 'mixed');
+        if (JSON.stringify(raw.affairTopics || []) !== topicsBefore) dataChanged = true;
         if (!Array.isArray(raw.accounts)) raw.accounts = defaults.accounts;
         for (const account of defaults.accounts) if (!raw.accounts.some((item) => item.phone === account.phone)) { raw.accounts.push(account); dataChanged = true; }
         if (dataChanged) localStorage.setItem(key, JSON.stringify(raw));
         return raw;
       }
     } catch (_) { /* Invalid demo data starts from the seed. */ }
-    const data = initial();
+    const data = applyDemoScenario(initial(), requestedScenario);
+    reconcileProcessingPosts(data);
     reconcileProcessingPosts(data);
     localStorage.setItem(key, JSON.stringify(data));
     return data;
@@ -735,6 +772,7 @@
     isPublicEcho,
     save(data) { localStorage.setItem(key, JSON.stringify(data)); window.dispatchEvent(new Event('prototype-data-changed')); },
     reset() { const data = initial(); reconcileProcessingPosts(data); this.save(data); return data; },
+    resetDemo(scenario = 'mixed') { const data = applyDemoScenario(initial(), scenario); this.save(data); return data; },
     postingBoards(data = read()) { return data.boards.filter((board) => board.enabled && board.staffPost); },
     searchContent(query, data = read()) {
       const keywords = String(query || '').normalize('NFKC').toLocaleLowerCase().split(/\s+/).filter(Boolean);
