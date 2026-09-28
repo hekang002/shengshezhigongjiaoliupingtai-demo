@@ -869,6 +869,18 @@ html.mobile-staff-view .ranking-backdrop { z-index: 50; align-items: end; paddin
 .progress-flow-detail .affair-progress-summary { margin-top: 18px; }
 .affair-progress-status { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding-bottom: 16px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 11px; }
 .affair-progress-status strong { font-size: 11px; }
+.progress-status-block + .progress-status-block { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
+.progress-status-block-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding-bottom: 16px; color: var(--muted); font-size: 11px; }
+.progress-status-block-head strong { font-size: 11px; }
+.progress-status-caption { display: block; margin-bottom: 7px; color: var(--muted); font-size: 10px; }
+.progress-log-title { margin: 0 0 12px; color: var(--ink); font-size: 14px; }
+.progress-operation-log { display: grid; gap: 8px; padding-left: 9px; border-left: 1px solid #d8ddda; }
+.progress-operation-entry { position: relative; display: grid; gap: 4px; padding: 12px 14px 12px 17px; border: 1px solid #e2e7e3; background: #fff; }
+.progress-operation-entry::before { content: ''; position: absolute; top: 15px; left: -5px; width: 8px; height: 8px; border: 2px solid var(--red); border-radius: 50%; background: #fafbfa; }
+.progress-operation-entry time { color: var(--muted); font-size: 10px; line-height: 1.4; }
+.progress-operation-entry strong { color: var(--ink); font-size: 12px; line-height: 1.65; overflow-wrap: anywhere; }
+.progress-operation-entry small { color: var(--muted); font-size: 10px; line-height: 1.5; }
+.progress-log-empty { margin: 0; color: var(--muted); font-size: 11px; }
 .affair-progress-steps { display: grid; margin: 18px 0 0; padding: 0; list-style: none; }
 .affair-progress-steps li { position: relative; display: grid; grid-template-columns: 22px minmax(0, 1fr); align-items: start; gap: 15px; min-height: 64px; padding: 5px 0 22px; color: var(--muted); text-align: left; }
 .affair-progress-steps li.upcoming { min-height: 42px; padding-bottom: 8px; }

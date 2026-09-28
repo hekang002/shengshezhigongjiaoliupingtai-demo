@@ -1657,11 +1657,32 @@ a { color: inherit; text-decoration: none; }
 .affair-topic-form .textarea { min-height: 150px; }
 .affair-topic-join-modal { width: min(720px, calc(100vw - 48px)); }
 .affair-topic-join-modal .modal-body { padding: 22px 24px; }
+.affair-topic-join-layout { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 20px; }
+.affair-topic-join-layout > * { min-width: 0; }
+.affair-topic-join-layout .affair-topic-join-source { margin-bottom: 0; max-height: 390px; overflow: auto; }
+.affair-topic-join-layout .affair-topic-picker { max-height: 390px; overflow: auto; }
 .affair-topic-join-source { margin-bottom: 16px; padding: 15px 17px; border-left: 3px solid var(--brand); background: #fff; }
+.affair-topic-join-source > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.affair-topic-join-source > header div { display: grid; gap: 4px; }
 .affair-topic-join-source > span { display: block; color: var(--muted); font-size: 11px; }
 .affair-topic-join-source > strong { display: block; margin-top: 4px; color: var(--ink); font-size: 15px; }
+.affair-topic-join-source > header span { color: var(--muted); font-size: 11px; }
+.affair-topic-join-source > header strong { color: var(--ink); font-size: 15px; }
+.affair-topic-join-source > header small { max-width: 280px; color: var(--muted); font-size: 11px; line-height: 1.5; text-align: right; }
 .affair-topic-join-source p { margin: 7px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.affair-topic-join-items { display: grid; margin-top: 12px; border-top: 1px solid var(--line); }
+.affair-topic-join-items article { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); }
+.affair-topic-join-items article > div { min-width: 0; display: grid; gap: 3px; }
+.affair-topic-join-items article strong { overflow: hidden; color: var(--ink); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.affair-topic-join-items article small { color: var(--muted); font-size: 11px; }
 .affair-topic-options { display: grid; gap: 9px; }
+.affair-topic-picker { border-top: 1px solid var(--line); padding-top: 15px; }
+.affair-topic-picker > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 10px; }
+.affair-topic-picker > header div { display: grid; gap: 3px; }
+.affair-topic-picker > header span { color: var(--muted); font-size: 11px; }
+.affair-topic-picker > header strong { color: var(--ink); font-size: 15px; }
+.affair-topic-picker > header small { max-width: 260px; color: var(--muted); font-size: 11px; line-height: 1.5; text-align: right; }
+.affair-topic-empty { padding: 22px 14px; border: 1px dashed var(--line); background: #fafafa; }
 .affair-topic-option { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 11px; padding: 14px 15px; border: 1px solid var(--line); background: #fff; cursor: pointer; }
 .affair-topic-option:has(input:checked) { border-color: #c98f8d; background: #fff8f7; }
 .affair-topic-option input { width: 16px; height: 16px; margin: 2px 0 0; accent-color: var(--brand); }
@@ -1859,3 +1880,4 @@ a { color: inherit; text-decoration: none; }
 @media (max-width: 760px) { .leader-scope-bar { align-items: flex-start; flex-direction: column; gap: 8px; } .leader-scope-bar > .btn { margin-left: 0; } .leader-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .leader-kpi:nth-child(3) { border-right: 1px solid var(--line); } .leader-kpi:nth-child(2n) { border-right: 0; } .leader-kpi:nth-child(-n+4) { border-bottom: 1px solid var(--line); } .leader-focus-list article { grid-template-columns: 1fr; } .leader-focus-progress { grid-column: auto; grid-row: auto; } .leader-report-band { grid-template-columns: 1fr; } .leader-report-actions { width: 100%; } .leader-report-actions .btn { flex: 1; justify-content: center; } }
 @media (max-width: 760px) { .leader-brief-strip { align-items: flex-start; flex-direction: column; gap: 7px; } .leader-brief-strip .is-warning { margin-left: 0; } .leader-analysis-filters { grid-template-columns: 1fr; } .leader-analysis-metrics, .leader-affair-summary { grid-template-columns: repeat(2,minmax(0,1fr)); } .leader-analysis-metrics > div:nth-child(2), .leader-affair-summary > div:nth-child(2) { border-right: 0; } .leader-analysis-metrics > div:nth-child(-n+2), .leader-affair-summary > div:nth-child(-n+2) { border-bottom: 1px solid var(--line); } .leader-analysis-lower { grid-template-columns: 1fr; } .leader-affair-toolbar { align-items: stretch; flex-direction: column; padding-bottom: 10px; } .leader-affair-toolbar .review-status-tabs { overflow-x: auto; } .leader-affair-toolbar > div:last-child { padding-inline: 10px; } .leader-affair-toolbar .input { width: 100%; } .leader-result-hero dl { grid-template-columns: repeat(2,minmax(0,1fr)); } .leader-result-hero dl div { min-height: 72px; border-bottom: 1px solid #ead5d3; } .leader-result-hero dl div:nth-child(2n) { border-right: 0; } .leader-result-tabs { align-items: stretch; flex-wrap: wrap; } .leader-result-tabs > div { width: 100%; margin-left: 0; } .leader-result-tabs .input { width: 100%; } .leader-result-list article { grid-template-columns: 72px minmax(0,1fr); align-items: stretch; } .leader-result-list article > .btn, .leader-result-list article > .badge { grid-column: 1 / -1; justify-self: end; } }
 @media (max-width: 760px) { .ops-head-meta { align-items: flex-end; flex-direction: column; } .ops-attention { grid-template-columns: 1fr; gap: 8px; } .ops-attention .btn { justify-self: stretch; justify-content: center; } .ops-kpi-grid { grid-template-columns: repeat(2,minmax(0,1fr)); } .ops-kpi:nth-child(3) { border-right: 1px solid var(--line); } .ops-kpi:nth-child(2n) { border-right: 0; } .ops-kpi:nth-child(-n+4) { border-bottom: 1px solid var(--line); } .ops-chart-legend { display: none; } .ops-dual-chart { gap: 7px; padding-inline: 10px; } .ops-priority-list article { grid-template-columns: 32px minmax(0,1fr) auto; } .ops-priority-list article > .badge { grid-column: 2; justify-self: start; } .ops-priority-list .icon-btn { grid-column: 3; grid-row: 1 / span 2; } }
+@media (max-width: 760px) { .affair-topic-join-layout { grid-template-columns: 1fr; gap: 12px; } .affair-topic-join-layout .affair-topic-join-source, .affair-topic-join-layout .affair-topic-picker { max-height: 260px; } }
