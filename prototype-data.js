@@ -110,7 +110,14 @@
   const processBoards = new Set(['建言献策', '心声诉求']);
   const pendingAuditStatuses = new Set(['私密发布', '待审核']);
   const rejectedAuditStatuses = new Set(['退回修改', '已驳回']);
+  const affairStatusMap = new Map([
+    ['待分办', '待处理'], ['待处理', '待处理'],
+    ['待承办确认', '处理中'], ['转办待接收', '处理中'], ['办理中', '处理中'], ['待复核', '处理中'], ['处理中', '处理中'],
+    ['已反馈', '已回复'], ['已办结', '已回复'], ['已回复', '已回复']
+  ]);
+  const needsSensitiveReview = (post) => Array.isArray(post?.sensitiveHits) && post.sensitiveHits.length > 0;
   function deriveAuditStatus(post) {
+    if (!needsSensitiveReview(post)) return '审核通过';
     if (post.contentAuditStatus) return post.contentAuditStatus;
     if (pendingAuditStatuses.has(post.status)) return '待审核';
     return rejectedAuditStatuses.has(post.status) ? '已驳回' : '审核通过';
@@ -122,34 +129,34 @@
     return '已发布';
   }
   function deriveWorkflowPublishStatus(post, affair) {
-    if (!affair) return derivePublishStatus(post);
-    if (!['已反馈', '已办结'].includes(affair.status)) return '未发布';
-    if (affair.feedback === '私密回复' || post.status === '已办结私密') return '私密发布';
-    if (affair.feedback === '公开答复' || post.status === '已办结公开') return '已发布';
+    if (!needsSensitiveReview(post)) return '已发布';
     return derivePublishStatus(post);
   }
   function deriveHandlingStatus(post, affair) {
     if (!processBoards.has(post.board)) return '不适用';
-    if (!affair) return deriveAuditStatus(post) === '审核通过' ? '待分办' : '不适用';
-    if (affair.status === '待分办') return '待分办';
-    if (affair.returnReason && affair.status === '办理中') return '退回修改';
-    if (affair.status === '待复核') return '待答复审核';
-    if (['已反馈', '已办结'].includes(affair.status)) return '已办结';
-    return '办理中';
+    if (!affair) return deriveAuditStatus(post) === '审核通过' ? '待处理' : '不适用';
+    return affairStatusMap.get(affair.status) || '处理中';
   }
   function normalizeWorkflowState(data) {
     let changed = false;
     for (const affair of data.affairs || []) {
-      if (['待承办确认', '转办待接收'].includes(affair.status)) {
-        affair.status = '办理中';
-        affair.assignmentState = '办理中';
-        if (affair.transfer?.status === '待接收') affair.transfer.status = '已改派';
-        changed = true;
-      }
+      const normalizedStatus = affairStatusMap.get(affair.status) || '处理中';
+      if (affair.status !== normalizedStatus) { affair.status = normalizedStatus; changed = true; }
+      if (affair.assignmentState !== normalizedStatus) { affair.assignmentState = normalizedStatus; changed = true; }
       if (!affair.createdAt) { affair.createdAt = affair.reviewedAt || affair.events?.[0]?.at || '2026-09-14 09:00'; changed = true; }
       if (!Array.isArray(affair.events)) { affair.events = []; changed = true; }
+      if (!affair.category) { affair.category = affair.sourceType === '心声诉求' ? '服务诉求' : '改进建议'; changed = true; }
+      if (!Array.isArray(affair.topicTags)) { affair.topicTags = []; changed = true; }
+      if (typeof affair.isKey !== 'boolean') { affair.isKey = ['重点', '紧急'].includes(affair.priority); changed = true; }
+      if (typeof affair.isCommon !== 'boolean') { affair.isCommon = false; changed = true; }
+      if (!affair.internalNote) { affair.internalNote = affair.requirements || ''; changed = true; }
+      if (affair.status === '已回复' && !affair.repliedAt) { affair.repliedAt = affair.closedAt || affair.events.at(-1)?.at || affair.createdAt; changed = true; }
       for (const event of affair.events) {
-        const text = String(event.text || '').replace('承办结果已提交，等待分办审核', '承办结果已提交，等待答复审核').replace('分办审核通过并办结', '答复审核通过并办结');
+        const text = String(event.text || '')
+          .replace(/已分办[^，。]*/g, '事项已完成分类')
+          .replace('承办结果已提交，等待分办审核', '事项正在整理回复')
+          .replace('承办结果已提交，等待答复审核', '事项正在整理回复')
+          .replace(/答复审核通过并办结/g, '已向用户发送正式回复');
         if (event.text !== text) { event.text = text; changed = true; }
       }
     }
@@ -160,7 +167,7 @@
       const handlingStatus = deriveHandlingStatus(post, affair);
       if (post.contentAuditStatus !== contentAuditStatus) { post.contentAuditStatus = contentAuditStatus; changed = true; }
       if (post.publishStatus !== publishStatus) { post.publishStatus = publishStatus; changed = true; }
-      if (affair && affair.publicationMode !== publishStatus) { affair.publicationMode = publishStatus; changed = true; }
+      if (!needsSensitiveReview(post) && post.status !== '已发布') { post.status = '已发布'; changed = true; }
       if (post.handlingStatus !== handlingStatus) { post.handlingStatus = handlingStatus; changed = true; }
     }
     return changed;
@@ -181,13 +188,13 @@
       const createdAt = post.reviewedAt || post.updatedAt || post.createdAt || post.time || '2026-09-14 09:00';
       const id = nextAffairNumber(data);
       data.affairs.unshift({
-        id, postId: post.id, title: post.title, sourceType: post.board, publicationMode: '未发布',
-        auditStatus: '审核通过', reviewedAt: createdAt, createdAt, owner: '', initialOwner: '', co: '', assigneeId: '', assigneeName: '',
-        deadline: '', priority: '一般', feedback: '', requirements: '', status: '待分办', assignmentState: '待分办',
-        stage: '', progress: '', draft: '', extension: null, transfer: null, flowSnapshot: post.flowSnapshot || null,
-        events: [{ text: `内容审核通过，自动生成待分办事项 ${id}`, at: createdAt }]
+        id, postId: post.id, title: post.title, sourceType: post.board,
+        auditStatus: '审核通过', reviewedAt: createdAt, createdAt,
+        category: post.board === '心声诉求' ? '服务诉求' : '改进建议', topicTags: [], isKey: false, isCommon: false, internalNote: '',
+        feedback: '', status: '待处理', assignmentState: '待处理', draft: '', repliedAt: '',
+        events: [{ text: `内容发布后自动生成待处理事项 ${id}`, at: createdAt }]
       });
-      post.handlingStatus = '待分办';
+      post.handlingStatus = '待处理';
       changed = true;
     }
     return changed;
@@ -210,8 +217,7 @@
       if (!post.processingAccepted) { post.processingAccepted = true; changed = true; }
       const handlingStatus = deriveHandlingStatus(post, affair);
       if (post.handlingStatus !== handlingStatus) { post.handlingStatus = handlingStatus; changed = true; }
-      if (['已反馈', '已办结'].includes(affair.status)) {
-        affair.status = '已办结';
+      if (affair.status === '已回复') {
         post.replyVisibility = affair.feedback === '公开答复' ? '公开可见' : '仅个人可见';
         post.reply = affair.draft || '';
       }
@@ -421,8 +427,8 @@
     roles: [
       { id: 'platform', name: '平台管理员', key: 'platform', scope: '全部数据', sort: 1, enabled: true, createdAt: '2026-09-10 09:00', fixed: true },
       { id: 'content', name: '内容管理员', key: 'content', scope: '授权组织', sort: 2, enabled: true, createdAt: '2026-09-10 09:00', fixed: true },
-      { id: 'dispatch', name: '分办管理员', key: 'dispatch', scope: '授权组织', sort: 3, enabled: true, createdAt: '2026-09-10 09:00', fixed: true },
-      { id: 'handler', name: '承办负责人', key: 'handler', scope: '所属部门', sort: 4, enabled: true, createdAt: '2026-09-10 09:00', fixed: true },
+      { id: 'dispatch', name: '事项管理员', key: 'dispatch', scope: '授权组织', sort: 3, enabled: true, createdAt: '2026-09-10 09:00', fixed: true },
+      { id: 'handler', name: '历史承办角色（停用）', key: 'handler', scope: '所属部门', sort: 4, enabled: false, createdAt: '2026-09-10 09:00', fixed: true },
       { id: 'leader', name: '领导查看', key: 'leader', scope: '授权组织', sort: 5, enabled: true, createdAt: '2026-09-10 09:00', fixed: true }
     ],
     menus: [
@@ -438,7 +444,7 @@
       { id: 'menu-policy', parentId: 'menu-review', name: '政策与问答', icon: 'book-open-check', sort: 4, type: '菜单', permission: 'content:policy', path: 'policy', enabled: true, visible: true, createdAt: '2026-09-14 08:00' },
       { id: 'menu-echo', parentId: 'menu-review', name: '回音壁管理', icon: 'badge-check', sort: 5, type: '菜单', permission: 'content:echo', path: 'echo', enabled: true, visible: true, createdAt: '2026-09-14 08:00' },
       { id: 'menu-affairs', parentId: null, name: '事项办理', icon: 'clipboard-list', sort: 4, type: '目录', permission: '', path: 'assignments', enabled: true, visible: true, createdAt: '2026-09-10 09:00' },
-      { id: 'menu-assign', parentId: 'menu-affairs', name: '事项分办', icon: 'git-branch', sort: 1, type: '菜单', permission: 'affair:assign', path: 'assignments', enabled: true, visible: true, createdAt: '2026-09-10 09:00' },
+      { id: 'menu-assign', parentId: 'menu-affairs', name: '事项处理', icon: 'tags', sort: 1, type: '菜单', permission: 'affair:process', path: 'handler-dispatch', enabled: true, visible: true, createdAt: '2026-09-10 09:00' },
       { id: 'menu-settings', parentId: null, name: '系统设置', icon: 'settings-2', sort: 9, type: '目录', permission: '', path: 'settings', enabled: true, visible: true, createdAt: '2026-09-10 09:00' },
       { id: 'menu-users', parentId: 'menu-settings', name: '用户管理', icon: 'users', sort: 1, type: '菜单', permission: 'system:user:view', path: 'users', enabled: true, visible: true, createdAt: '2026-09-10 09:00' },
       { id: 'menu-dict', parentId: 'menu-settings', name: '字典管理', icon: 'book-open', sort: 2, type: '菜单', permission: 'system:dict:view', path: 'dictionary-management', enabled: true, visible: true, createdAt: '2026-09-10 09:00' }
@@ -465,10 +471,10 @@
       { id: 'entry-report-other', typeId: 'dict-report-reason', label: '其他', value: 'other', sort: 7, note: '其他需要平台核查的问题', createdAt: '2026-09-16 09:00' }
     ],
     boards: [
-      { id: 'board-ideas', name: '建言献策', description: '征集改革发展和管理服务建议', type: '诉求办理类', publisher: '职工', reviewRule: '人工审核', allowComments: true, generatesAffair: true, system: false, sort: 1, enabled: true, staffPost: true },
-      { id: 'board-voices', name: '心声诉求', description: '反映工作生活中的具体问题和实际诉求', type: '诉求办理类', publisher: '职工', reviewRule: '人工审核', allowComments: true, generatesAffair: true, system: false, sort: 2, enabled: true, staffPost: true },
+      { id: 'board-ideas', name: '建言献策', description: '征集改革发展和管理服务建议', type: '诉求办理类', publisher: '职工', reviewRule: '按敏感规则处理', allowComments: true, generatesAffair: true, system: false, sort: 1, enabled: true, staffPost: true },
+      { id: 'board-voices', name: '心声诉求', description: '反映工作生活中的具体问题和实际诉求', type: '诉求办理类', publisher: '职工', reviewRule: '按敏感规则处理', allowComments: true, generatesAffair: true, system: false, sort: 2, enabled: true, staffPost: true },
       { id: 'board-exchange', name: '业务交流', description: '分享业务经验、工作方法和协作信息', type: '内容交流类', publisher: '职工', reviewRule: '按敏感规则处理', allowComments: true, generatesAffair: false, system: false, sort: 3, enabled: true, staffPost: true },
-      { id: 'board-echo', name: '回音壁', description: '展示已办结事项的答复和整改成效', type: '成果发布类', publisher: '管理员', reviewRule: '仅管理员发布', allowComments: true, generatesAffair: false, system: true, sort: 4, enabled: true, staffPost: false }
+      { id: 'board-echo', name: '回音壁', description: '展示管理员选择公开的事项回复', type: '成果发布类', publisher: '管理员', reviewRule: '仅管理员发布', allowComments: true, generatesAffair: false, system: true, sort: 4, enabled: true, staffPost: false }
     ],
     flowConfigs: ['建言献策', '心声诉求'].map((board) => ({
       board, version: 1, published: { decision: '人工判断', contentRole: 'content', assignmentRole: 'dispatch', answerRole: 'dispatch', extensionRole: 'dispatch' }, draft: null, publishedAt: '2026-09-14 09:00'
@@ -669,6 +675,22 @@
         }
         const affairsMenu = raw.menus.find((item) => item.id === 'menu-affairs');
         if (affairsMenu?.name === '事项办理' && affairsMenu.parentId === null && affairsMenu.sort === 3) { affairsMenu.sort = 4; dataChanged = true; }
+        const processMenu = raw.menus.find((item) => item.id === 'menu-assign');
+        if (processMenu && (processMenu.name !== '事项处理' || processMenu.path !== 'handler-dispatch' || processMenu.permission !== 'affair:process')) {
+          Object.assign(processMenu, { name: '事项处理', icon: 'tags', path: 'handler-dispatch', permission: 'affair:process' });
+          dataChanged = true;
+        }
+        const dispatchRole = raw.roles.find((item) => item.id === 'dispatch');
+        if (dispatchRole?.name !== '事项管理员') { dispatchRole.name = '事项管理员'; dataChanged = true; }
+        const handlerRole = raw.roles.find((item) => item.id === 'handler');
+        if (handlerRole && (handlerRole.name !== '历史承办角色（停用）' || handlerRole.enabled !== false)) {
+          handlerRole.name = '历史承办角色（停用）'; handlerRole.enabled = false; dataChanged = true;
+        }
+        for (const board of raw.boards.filter((item) => ['建言献策', '心声诉求'].includes(item.name))) {
+          if (board.reviewRule !== '按敏感规则处理') { board.reviewRule = '按敏感规则处理'; dataChanged = true; }
+        }
+        const echoBoard = raw.boards.find((item) => item.id === 'board-echo');
+        if (echoBoard && echoBoard.description !== '展示管理员选择公开的事项回复') { echoBoard.description = '展示管理员选择公开的事项回复'; dataChanged = true; }
         const echoMenu = raw.menus.find((item) => item.id === 'menu-echo');
         if (echoMenu?.name === '回音壁发布') { echoMenu.name = '回音壁管理'; dataChanged = true; }
         for (const role of raw.roles) {

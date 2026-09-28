@@ -27,7 +27,7 @@ function renderMobileHeader() {
 function renderMobileHome() {
   const banner = policyBanners[state.bannerIndex];
   const posts = getMobileHomePosts();
-  return `<div class="mobile-page mobile-home"><section class="mobile-welcome"><span>${state.session.department}</span><h1>${state.session.name}，你好</h1><p>今天也来看看大家的新声音。</p></section><section class="mobile-policy-banner" style="background-image:linear-gradient(180deg, rgba(19,25,24,.08), rgba(19,25,24,.86)),url('${banner.image}')"><div><span>${banner.tag}</span><h2>${banner.title}</h2><button type="button" onclick="AppPrototype.setWorkspaceView('policy')">查看详情 ${icon('arrow-right')}</button></div><nav>${policyBanners.map((_, index) => `<button type="button" class="${index === state.bannerIndex ? 'active' : ''}" aria-label="第 ${index + 1} 条" onclick="AppPrototype.setBanner(${index})"></button>`).join('')}</nav></section><nav class="mobile-segments mobile-sticky-tabs" aria-label="首页内容分类">${['全部', '精华贴', '本周热议'].map((tab) => `<button type="button" class="${state.homeContentTab === tab ? 'active' : ''}" onclick="AppPrototype.setHomeContentTab('${tab}')">${tab}</button>`).join('')}</nav>${renderMobileFeed(posts, state.homeContentTab === '全部' ? '全部内容' : state.homeContentTab, true)}</div>`;
+  return `<div class="mobile-page mobile-home"><section class="mobile-welcome"><span>${state.session.department}</span><h1>${state.session.name}，你好</h1><p>今天也来看看大家的新声音。</p></section><section class="mobile-policy-banner" style="background-image:linear-gradient(180deg, rgba(19,25,24,.08), rgba(19,25,24,.86)),url('${banner.image}')"><div><span>${banner.tag}</span><h2>${banner.title}</h2></div><nav>${policyBanners.map((_, index) => `<button type="button" class="${index === state.bannerIndex ? 'active' : ''}" aria-label="第 ${index + 1} 条" onclick="AppPrototype.setBanner(${index})"></button>`).join('')}</nav></section><nav class="mobile-segments mobile-sticky-tabs" aria-label="首页内容分类">${['全部', '精华贴', '本周热议'].map((tab) => `<button type="button" class="${state.homeContentTab === tab ? 'active' : ''}" onclick="AppPrototype.setHomeContentTab('${tab}')">${tab}</button>`).join('')}</nav>${renderMobileFeed(posts, state.homeContentTab === '全部' ? '全部内容' : state.homeContentTab, true)}</div>`;
 }
 
 function renderMobileVoices() {
@@ -175,7 +175,7 @@ function renderMobileContent() {
 }
 
 function renderMobileBottomNav() {
-  const items = [['dashboard', '首页', 'home'], ['voices', '心声', 'messages-square'], ['policy', '政策', 'book-open-check'], ['notices', '公告', 'bell'], ['profile', '我的', 'user-round']];
+  const items = [['dashboard', '首页', 'home'], ['voices', '心声', 'messages-square'], ['notices', '公告', 'bell'], ['profile', '我的', 'user-round']];
   return `<nav class="mobile-bottom-nav" aria-label="移动端主导航">${items.map(([id, label, iconName]) => `<button type="button" class="${state.workspaceView === id ? 'active' : ''}" onclick="AppPrototype.setWorkspaceView('${id}')">${icon(iconName)}<span>${label}</span>${id === 'notices' && homeNotices.some((notice) => !state.noticeRead[notice.id]) ? '<i></i>' : ''}</button>`).join('')}</nav>`;
 }
 

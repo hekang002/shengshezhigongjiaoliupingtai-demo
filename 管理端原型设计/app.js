@@ -43,8 +43,8 @@ const badge = (text, type = '') => `<span class="badge ${type}">${text}</span>`;
 const roleInfo = {
   platform: { label: '平台管理员', short: '平台', tone: '平台治理', avatar: '管' },
   content: { label: '内容管理员', short: '内容', tone: '内容管理', avatar: '审' },
-  dispatch: { label: '分办管理员', short: '分办', tone: '事项闭环', avatar: '分' },
-  handler: { label: '承办负责人', short: '承办', tone: '部门办理', avatar: '承' },
+  dispatch: { label: '事项管理员', short: '事项', tone: '事项处理', avatar: '事' },
+  handler: { label: '历史承办角色', short: '历史', tone: '已停用角色', avatar: '历' },
   leader: { label: '领导查看', short: '领导', tone: '运行总览', avatar: '领' },
 };
 
@@ -53,38 +53,35 @@ const handlerNav = [
   ['handler-handling', '办理反馈', 'clipboard-pen-line'],
   ['handler-answers', '已办结事项', 'badge-check']
 ];
-const leaderNav = [
-  ['leader-dashboard', '领导驾驶舱', 'chart-spline'],
-  ['leader-statistics', '专题统计', 'chart-no-axes-combined'],
-  ['leader-key-affairs', '重点事项', 'clipboard-check'],
-  ['leader-results', '公开成果', 'badge-check']
-];
+  const leaderNav = [
+    ['leader-dashboard', '数据驾驶舱', 'chart-spline'],
+    ['leader-statistics', '专题统计', 'chart-no-axes-combined'],
+    ['leader-key-affairs', '重点事项', 'clipboard-check'],
+    ['leader-results', '公开成果', 'badge-check']
+  ];
 const navByRole = {
   platform: [
     ['工作总览', [['dashboard', '运营工作台', 'gauge']]],
-    ['领导视图', leaderNav],
-    ['内容管理', [['content-ledger', '信息台账管理', 'notebook-tabs'], ['announcements', '通知公告管理', 'megaphone'], ['policy', '政策与问答', 'book-open-check'], ['banners', '轮播图管理', 'images'], ['echo', '回音壁管理', 'badge-check']]],
-    ['承办管理', handlerNav],
-    ['事项办理', [['handler-dispatch', '事项分办', 'git-pull-request-arrow']]],
-    ['溯源查询', [['trace-query', '溯源查询', 'search-check']]],
-    ['审核管理', [['content-review', '信息内容审核', 'shield-check'], ['extension-review', '事项办理延期审核', 'calendar-clock'], ['comments', '评论审核', 'message-square'], ['report-review', '举报核查', 'flag-triangle-right'], ['user-review', '用户审核', 'user-round-check'], ['trace-review', '溯源查询审核', 'search-check']]],
-    ['配置管理', [['categories', '栏目管理', 'panels-top-left'], ['sensitive', '敏感词库', 'scan-text'], ['flow-config', '流程配置', 'workflow'], ['base-config', '基础配置', 'shield-check']]],
+    ['数据统计', leaderNav],
+    ['内容管理', [['content-ledger', '信息台账管理', 'notebook-tabs'], ['announcements', '通知公告管理', 'megaphone'], ['banners', '轮播图管理', 'images'], ['echo', '回音壁管理', 'badge-check']]],
+    ['事项办理', [['handler-dispatch', '事项处理', 'tags']]],
+    ['审核管理', [['content-review', '信息内容审核', 'shield-check'], ['comments', '评论审核', 'message-square'], ['report-review', '举报核查', 'flag-triangle-right'], ['user-review', '用户审核', 'user-round-check']]],
+    ['配置管理', [['categories', '栏目管理', 'panels-top-left'], ['sensitive', '敏感词库', 'scan-text'], ['base-config', '基础配置', 'shield-check']]],
     ['系统设置', [['users', '用户管理', 'users'], ['organization', '组织架构', 'network'], ['permissions', '角色管理', 'key-round'], ['menu-management', '菜单管理', 'panels-top-left'], ['dictionary-management', '字典管理', 'book-open'], ['logs', '系统日志', 'scroll-text']]],
   ],
   content: [
     ['工作总览', [['dashboard', '运营工作台', 'gauge']]],
-    ['溯源查询', [['trace-query', '溯源查询', 'search-check']]],
-    ['审核管理', [['content-review', '信息内容审核', 'shield-check'], ['comments', '评论审核', 'message-square'], ['report-review', '举报核查', 'flag-triangle-right'], ['trace-review', '溯源查询审核', 'search-check']]],
-    ['内容管理', [['content-ledger', '信息台账管理', 'notebook-tabs'], ['announcements', '通知公告管理', 'megaphone'], ['policy', '政策与问答', 'book-open-check'], ['banners', '轮播图管理', 'images'], ['echo', '回音壁管理', 'badge-check']]],
+    ['审核管理', [['content-review', '信息内容审核', 'shield-check'], ['comments', '评论审核', 'message-square'], ['report-review', '举报核查', 'flag-triangle-right']]],
+    ['内容管理', [['content-ledger', '信息台账管理', 'notebook-tabs'], ['announcements', '通知公告管理', 'megaphone'], ['banners', '轮播图管理', 'images'], ['echo', '回音壁管理', 'badge-check']]],
     ['配置管理', [['categories', '栏目管理', 'panels-top-left'], ['sensitive', '敏感词库', 'scan-text']]],
   ],
   dispatch: [
     ['工作总览', [['dashboard', '运营工作台', 'gauge']]],
-    ['事项办理', [['handler-dispatch', '事项分办', 'git-pull-request-arrow'], ['rectifications', '整改台账', 'list-checks']]],
+    ['事项办理', [['handler-dispatch', '事项处理', 'tags'], ['rectifications', '整改台账', 'list-checks']]],
     ['分析与协同', [['statistics', '办理统计', 'chart-no-axes-combined'], ['audit', '操作留痕', 'scroll-text']]],
   ],
-  handler: [['承办管理', handlerNav]],
-  leader: [['领导视图', leaderNav]],
+  handler: [],
+  leader: [['数据统计', leaderNav]],
 };
 
 const STAFF_APP_URL = new URL('../index.html', document.baseURI).href;
@@ -105,7 +102,7 @@ function renderGlobalSearchResults() {
   panel.innerHTML = rows.length ? `<div class="global-search-caption">${input.value.trim() ? `找到 ${rows.length} 条结果` : '默认展示最近内容'}</div>${rows.map((item) => `<button type="button" onmousedown="event.preventDefault();openGlobalSearchResult('${item.type}','${searchSafe(item.id)}')"><span class="global-search-type">${item.type}</span><span><strong>${searchSafe(item.title)}</strong><small>${searchSafe(item.meta)}</small></span>${icon('chevron-right')}</button>`).join('')}` : '<div class="global-search-empty">未找到匹配内容，请增加或调整关键词</div>';
 }
 function closeGlobalSearchResults() { setTimeout(() => { const panel = document.getElementById('global-search-results'); if (panel) panel.hidden = true; }, 120); }
-function openGlobalSearchResult(type) { const panel = document.getElementById('global-search-results'); if (panel) panel.hidden = true; go(type === '政策' ? 'policy' : 'content-ledger'); }
+function openGlobalSearchResult() { const panel = document.getElementById('global-search-results'); if (panel) panel.hidden = true; go('content-ledger'); }
 
 function setState(next) { Object.assign(state, next); render(); }
 function logout() { sessionStorage.removeItem('prototype-handler-account-id'); sessionStorage.removeItem('prototype-management-account-id'); window.location.href = STAFF_APP_URL; }
@@ -137,7 +134,7 @@ function renderProfileModal() {
   return `<div class="account-modal-backdrop" onclick="closeProfileModal(event)"><section class="account-modal" role="dialog" aria-modal="true" aria-label="个人中心"><header><h2>个人中心</h2><button onclick="closeProfileModal()" title="关闭">${icon('x')}</button></header><nav>${[['basic','基本设置'],['security','安全设置'],['devices','在线设备']].map(([id,label]) => `<button class="${tab === id ? 'active' : ''}" onclick="setProfileTab('${id}')">${label}</button>`).join('')}</nav><div class="account-modal-body">${tab === 'basic' ? basic : tab === 'security' ? security : devices}</div></section></div>`;
 }
 function switchRole(role) { state.role = role; state.page = role === 'handler' ? 'handler-dashboard' : role === 'leader' ? 'leader-dashboard' : 'dashboard'; state.modal = null; state.expandedNavGroup = ['handler', 'leader'].includes(role) ? 0 : null; const url = new URL(location.href); if (role === 'handler') url.searchParams.set('role', 'handler'); else url.searchParams.delete('role'); history.replaceState(null, '', url); render(); showToast(`已切换至${roleInfo[role].label}`); }
-function go(page) { state.page = page; state.modal = null; state.traceResult = null; const groupIndex = navByRole[state.role]?.findIndex(([, items]) => items.some(([route]) => route === page)) ?? -1; if (groupIndex >= 0) state.expandedNavGroup = groupIndex; render(); window.scrollTo(0, 0); }
+function go(page) { state.page = ['policy', 'trace-query', 'trace-review'].includes(page) ? 'dashboard' : page; state.modal = null; state.traceResult = null; const groupIndex = navByRole[state.role]?.findIndex(([, items]) => items.some(([route]) => route === state.page)) ?? -1; if (groupIndex >= 0) state.expandedNavGroup = groupIndex; render(); window.scrollTo(0, 0); }
 function toggleNavGroup(index) { state.expandedNavGroup = state.expandedNavGroup === index ? null : index; render(); }
 function openModal(type, id = '') { state.modal = { type, id }; render(); }
 function closeModal() { state.modal = null; render(); }
@@ -148,8 +145,8 @@ function renderNav() {
   const data = window.PrototypeData?.read();
   const handlerAccountId = sessionStorage.getItem('prototype-handler-account-id');
   const handlerDept = (handlerAccountId ? data?.accounts.find((account) => account.id === handlerAccountId && account.role === 'handler' && account.status === 'approved') : data?.accounts.find((account) => account.role === 'handler' && account.status === 'approved'))?.department;
-  const counts = data ? { review: data.posts.filter((p) => p.board !== '业务交流' && p.status === '待审核').length, comments: new Set(data.comments.filter((c) => c.status === '待审核' && (c.sensitiveHits?.length || c.protectedListId)).map((c) => String(c.postId))).size, 'report-review': data.reports.filter((r) => r.status === '待核查').length, 'content-review': data.posts.filter((p) => ['建言献策', '心声诉求', '业务交流'].includes(p.board) && (state.role !== 'content' || p.board !== '业务交流') && ['私密发布', '待审核'].includes(p.status)).length, 'extension-review': data.affairs.filter((a) => a.extension?.status === '待审批').length, assignments: data.posts.filter((p) => ['建言献策', '心声诉求'].includes(p.board) && p.status === '已发布' && (p.flowSnapshot || PrototypeData.flowFor(p.board, data)) && !data.affairs.some((a) => a.postId === p.id)).length, 'handler-tasks': data.affairs.filter((a) => ['待承办确认', '转办待接收', '办理中'].includes(a.status) && (state.role !== 'handler' || a.owner === handlerDept || a.transfer?.toAssigneeId === handlerAccountId)).length, 'user-review': (data.accounts || []).filter((a) => a.status === 'pending').length } : {};
-  const groupIcons = { '工作总览': 'layout-dashboard', '审核管理': 'user-round-check', '溯源查询': 'search-check', '系统设置': 'settings-2', '内容管理': 'files', '事项办理': 'clipboard-list', '承办管理': 'briefcase-business', '整改与公开': 'badge-check', '内容运营': 'megaphone', '数据分析': 'chart-no-axes-combined', '配置管理': 'sliders-horizontal', '分析与协同': 'chart-no-axes-combined', '承办工作台': 'briefcase-business', '部门数据': 'folder-open', '领导视图': 'chart-spline' };
+  const counts = data ? { review: data.posts.filter((p) => p.sensitiveHits?.length && p.contentAuditStatus === '待审核').length, comments: new Set(data.comments.filter((c) => c.status === '待审核' && c.sensitiveHits?.length).map((c) => String(c.postId))).size, 'report-review': data.reports.filter((r) => r.status === '待核查').length, 'content-review': data.posts.filter((p) => ['建言献策', '心声诉求', '业务交流'].includes(p.board) && (state.role !== 'content' || p.board !== '业务交流') && p.sensitiveHits?.length && p.contentAuditStatus === '待审核').length, assignments: data.affairs.filter((a) => a.status === '待处理').length, 'user-review': (data.accounts || []).filter((a) => a.status === 'pending').length } : {};
+  const groupIcons = { '工作总览': 'layout-dashboard', '审核管理': 'user-round-check', '溯源查询': 'search-check', '系统设置': 'settings-2', '内容管理': 'files', '事项办理': 'clipboard-list', '承办管理': 'briefcase-business', '整改与公开': 'badge-check', '内容运营': 'megaphone', '数据分析': 'chart-no-axes-combined', '配置管理': 'sliders-horizontal', '分析与协同': 'chart-no-axes-combined', '承办工作台': 'briefcase-business', '部门数据': 'folder-open', '数据统计': 'chart-spline', '领导视图': 'chart-spline' };
   return groups.map(([group, items], index) => {
     const expanded = state.expandedNavGroup === index;
     const current = items.some(([page]) => page === state.page);
