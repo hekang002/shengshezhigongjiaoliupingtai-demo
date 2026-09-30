@@ -54,10 +54,7 @@ const handlerNav = [
   ['handler-answers', '已办结事项', 'badge-check']
 ];
   const leaderNav = [
-    ['leader-dashboard', '数据驾驶舱', 'chart-spline'],
-    ['leader-statistics', '专题统计', 'chart-no-axes-combined'],
-    ['leader-key-affairs', '重点事项', 'clipboard-check'],
-    ['leader-results', '公开成果', 'badge-check']
+    ['leader-dashboard', '数据驾驶舱', 'chart-spline']
   ];
 const navByRole = {
   platform: [

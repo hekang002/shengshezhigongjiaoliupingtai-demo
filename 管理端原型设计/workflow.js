@@ -83,6 +83,10 @@
   let commentReviewFilters = { query: '', board: '', risk: '', dateFrom: '', dateTo: '' };
   let reportReviewTab = '待核查';
   let reportReviewFilters = { query: '', category: '', dateFrom: '', dateTo: '' };
+  let leaderPeriod = '本月';
+  let leaderCustomFrom = '';
+  let leaderCustomTo = '';
+  let cockpitHotIds = [];
   const sensitiveCategories = ['信息安全', '内部信息', '廉洁合规', '不文明用语', '广告引流', '其他'];
   const riskPolicy = (level) => level === '高' ? '禁止提交' : level === '中' ? '优先人工审核' : '普通人工审核';
   const riskBadge = (level) => `<span class="risk-level risk-${level === '高' ? 'high' : level === '中' ? 'medium' : 'low'}">${safe(level)}风险</span>`;
@@ -94,7 +98,8 @@
   const handlerAccountId = () => sessionStorage.getItem('prototype-handler-account-id') || '';
   const handlerAccounts = (data) => (data.accounts || []).filter((account) => account.role === 'handler' && account.status === 'approved');
   const accountSelect = (data, id, label, selected = '') => `<label class="field"><span>${label}</span><select class="select" id="wf-${id}"><option value="">请选择承办人</option>${handlerAccounts(data).map((account) => `<option value="${safe(account.id)}" ${account.id === selected ? 'selected' : ''}>${safe(account.name)} · ${safe(account.department)}</option>`).join('')}</select></label>`;
-  const processPost = (post) => ['建言献策', '心声诉求', '业务交流'].includes(post?.board);
+  // Only advice and requests enter the item-processing workflow. Business exchange is published content only.
+  const processPost = (post) => ['建言献策', '心声诉求'].includes(post?.board);
   const canAuditPost = () => canReview();
   const auditStatus = (post) => post?.contentAuditStatus || (['私密发布', '待审核'].includes(post?.status) ? '待审核' : ['退回修改', '已驳回'].includes(post?.status) ? '已驳回' : '审核通过');
   const publicationStatus = (post) => post?.publishStatus || (post?.status === '私密发布' || post?.status === '已办结私密' ? '私密发布' : PrototypeData.isPublicPost(post) ? '已发布' : '未发布');
@@ -237,33 +242,36 @@
     const waiting = data.affairs.filter((affair) => affair.status === '待处理').length;
     const active = data.affairs.filter((affair) => affair.status === '处理中').length;
     const replied = data.affairs.filter((affair) => affair.status === '已回复').length;
-    const archived = data.affairs.filter((affair) => affair.status === '已归档').length;
+    const noAction = data.affairs.filter((affair) => ['无需处理', '已归档'].includes(affair.status)).length;
     if (state.role === 'platform') {
-      const keyCount = data.affairs.filter((affair) => affair.isKey).length;
       const topicCount = affairTopics(data).length;
+      const archived = data.affairs.filter((affair) => affair.status === '已归档').length;
       const publicPosts = data.posts.filter((post) => PrototypeData.isPublicPost(post)).length;
-      const urgent = data.affairs.filter((affair) => ['待处理', '处理中'].includes(affair.status)).sort((a, b) => affairAttentionRank(a) - affairAttentionRank(b) || String(a.deadline || '').localeCompare(String(b.deadline || ''))).slice(0, 6);
-      const dates = ['09-14', '09-15', '09-16', '09-17', '09-18', '09-19', '09-20'];
-      const postTrend = dates.map((date, index) => data.posts.filter((post) => String(post.time || '').includes(date)).length + [2, 3, 1, 4, 2, 5, 3][index]);
-      const affairTrend = dates.map((date, index) => data.affairs.filter((affair) => String(affair.createdAt || '').includes(date)).length + [1, 1, 2, 2, 3, 2, 4][index]);
-      const maxTrend = Math.max(1, ...postTrend, ...affairTrend);
-      const kpis = [
-        ['file-text', '发帖量', data.posts.length, `已公开 ${publicPosts} 篇`, 'content-ledger', ''],
-        ['shield-alert', '待审核', pending, '仅统计敏感词命中内容', 'content-review', pending ? 'is-alert' : ''],
-        ['inbox', '待处理', waiting, '待管理端处置', 'handler-dispatch', waiting ? 'is-warning' : ''],
-        ['loader-circle', '处理中', active, '线下讨论后记录回复', 'handler-dispatch', ''],
-        ['star', '重点事项', keyCount, '用于重点问题筛选', 'handler-dispatch', keyCount ? 'is-alert' : ''],
-        ['layers-3', '问题专题', topicCount, '人工建立并归组', 'handler-dispatch', 'is-good'],
-        ['archive', '已归档', archived, '保留历史处置记录', 'handler-dispatch', '']
+      const pendingComments = data.comments.filter((comment) => comment.status === '待审核').length;
+      const pendingReports = data.reports.filter((report) => report.status === '待核查').length;
+      const pendingUsers = (data.accounts || []).filter((account) => account.status === 'pending').length;
+      const pendingPublications = data.affairs.filter((affair) => affair.status === '已回复' && !(data.echoPublications || []).some((item) => String(item.affairId) === String(affair.id) && item.status === '已发布')).length;
+      const queue = [
+        [pending, '内容审核', '敏感内容待人工判断', 'shield-check', 'content-review', '审核'],
+        [waiting, '待处理事项', '需要完成事项分类或归档', 'tags', 'handler-dispatch', '处理'],
+        [active, '处理中事项', '可建立专题或统一回复', 'layers-3', 'handler-dispatch', '查看'],
+        [pendingPublications, '待公开反馈', '已回复但尚未发布到回音壁', 'megaphone', 'handler-dispatch', '发布'],
+        [pendingComments + pendingReports, '互动核查', `评论 ${pendingComments} · 举报 ${pendingReports}`, 'flag-triangle-right', 'comments', '核查']
+      ].filter(([count]) => count > 0);
+      const quickLinks = [
+        ['content-review', '内容审核', '判断内容是否可以公开', 'shield-check'],
+        ['handler-dispatch', '事项处理', '分类、归组、回复诉求', 'tags'],
+        ['echo', '回音壁管理', '维护公开反馈结果', 'megaphone'],
+        ['leader-dashboard', '数据驾驶舱', '查看参与与办理趋势', 'chart-spline']
       ];
-      return heading('运营工作台', '集中查看敏感内容审核、事项分类和统一回复进度。', `<div class="ops-head-meta"><span>${icon('refresh-cw')}数据更新于 ${boardUpdateTime()}</span><button class="btn btn-secondary" onclick="showToast('运营日报已生成')">${icon('download')}导出日报</button></div>`) +
-        `<section class="ops-attention"><div><strong>${icon('bell-ring')}今日需要关注</strong><span>${pending + waiting + active} 项待处理</span></div><p><b>${pending}</b> 条敏感内容待审核、<b>${waiting}</b> 项待处置、<b>${active}</b> 项处理中</p><button class="btn btn-sm btn-primary" onclick="go('${pending ? 'content-review' : 'handler-dispatch'}')">进入优先待办${icon('arrow-right')}</button></section>` +
-        `<section class="ops-kpi-grid">${kpis.map(([symbol,label,value,note,page,tone])=>`<button class="ops-kpi ${tone}" onclick="go('${page}')"><header>${icon(symbol)}<span>${label}</span>${icon('arrow-up-right')}</header><strong>${safe(value)}</strong><p>${safe(note)}</p></button>`).join('')}</section>` +
-        `<div class="ops-dashboard-grid"><section class="ops-panel ops-trend-panel"><header><div><h2>业务趋势概览</h2><p>近 7 日内容发布与事项生成变化</p></div><div class="ops-chart-legend"><span><i></i>发帖量</span><span><i></i>事项生成</span></div></header><div class="ops-dual-chart">${dates.map((date,index)=>`<div><b>${postTrend[index]+affairTrend[index]}</b><span><i style="height:${Math.max(10,postTrend[index]/maxTrend*100)}%"></i><i style="height:${Math.max(10,affairTrend[index]/maxTrend*100)}%"></i></span><small>${date}</small></div>`).join('')}</div><footer><span>本期发帖 <strong>${postTrend.reduce((a,b)=>a+b,0)}</strong></span><span>事项生成 <strong>${affairTrend.reduce((a,b)=>a+b,0)}</strong></span><span>已回复 <strong>${replied}</strong></span></footer></section><aside class="ops-panel ops-health-panel"><header><div><h2>事项处理进度</h2><p>当前工作状态分布</p></div><span class="badge ${waiting + active ? 'gold' : 'green'}">${waiting + active ? '处理中' : '无待处置'}</span></header><div class="ops-funnel"><div><span>待处理</span><strong>${waiting}</strong><small>${data.affairs.length ? Math.round(waiting / data.affairs.length * 100) : 0}%</small></div><i></i><div><span>处理中</span><strong>${active}</strong><small>${data.affairs.length ? Math.round(active / data.affairs.length * 100) : 0}%</small></div><i></i><div><span>已回复</span><strong>${replied}</strong><small>${data.affairs.length ? Math.round(replied / data.affairs.length * 100) : 0}%</small></div></div><div class="ops-health-notes"><span>${icon('circle-check')}已回复 ${replied} 项</span><span>${icon('archive')}已归档 ${archived} 项</span></div></aside></div>` +
-        `<div class="ops-lower-grid"><section class="ops-panel"><header><div><h2>优先处理队列</h2><p>按逾期、临期和重点属性排序</p></div><button class="text-link" onclick="go('handler-dispatch')">查看全部</button></header><div class="ops-priority-list">${urgent.map((item)=>`<article><span class="ops-priority-icon">${icon('clipboard-list')}</span><div><strong>${safe(item.title)}</strong><p>${safe(item.id)} · ${safe(item.category || '待分类')}</p></div>${badgeFor(item.status)}<button class="icon-btn" data-action="affair-view" data-id="${safe(item.id)}" title="查看事项">${icon('chevron-right')}</button></article>`).join('') || '<div class="empty">暂无优先事项</div>'}</div></section><aside class="ops-panel"><header><div><h2>近期运营动态</h2><p>审核、分类与回复操作记录</p></div><span class="badge">实时</span></header><div class="ops-activity-list">${data.audit.slice(0,6).map((item)=>`<div><i></i><span><strong>${safe(item.action)}</strong><p>${safe(item.detail)}</p></span><time>${safe(item.at)}</time></div>`).join('') || `<div><i></i><span><strong>平台数据已完成汇总</strong><p>当前暂无新的人工操作记录</p></span><time>刚刚</time></div>`}</div></aside></div>`;
+      const recent = data.audit.slice(0, 6);
+      const today = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
+      const priority = data.affairs.filter((affair) => ['待处理', '处理中'].includes(affair.status)).sort((a, b) => affairAttentionRank(a) - affairAttentionRank(b)).slice(0, 5);
+      return heading('运营工作台', '围绕内容审核、事项处理和公开反馈组织每日工作。', `<div class="wb-head-meta"><span>${icon('calendar-days')}${today}</span><span>${icon('refresh-cw')}更新于 ${boardUpdateTime()}</span><button class="btn btn-secondary" onclick="showToast('运营日报已生成')">${icon('download')}导出日报</button></div>`) +
+        `<div class="wb-layout"><aside class="wb-left"><section class="wb-profile"><div class="wb-profile-top"><div class="wb-avatar">${roleInfo[state.role].avatar}</div><div><span>当前工作身份</span><h2>${safe(currentAccount().name)}</h2><p>${safe(roleInfo[state.role].label)} · ${safe(currentAccount().department || '平台管理组')}</p></div></div><div class="wb-profile-scope">${icon('building-2')}省社本级及授权组织<span>数据范围</span></div><div class="wb-mini-stats"><button data-action="nav" data-id="content-review"><strong>${pending}</strong><span>待审核</span></button><button data-action="nav" data-id="handler-dispatch"><strong>${waiting}</strong><span>待处理</span></button><button data-action="nav" data-id="handler-dispatch"><strong>${active}</strong><span>处理中</span></button><button data-action="nav" data-id="handler-dispatch"><strong>${pendingPublications}</strong><span>待公开</span></button></div></section><section class="wb-side-section"><header><h3>常用入口</h3><button class="text-link" data-action="nav" data-id="leader-dashboard">查看驾驶舱</button></header><div class="wb-quick-grid">${quickLinks.map(([page,label,note,symbol])=>`<button data-action="nav" data-id="${page}"><span class="wb-quick-icon">${icon(symbol)}</span><strong>${label}</strong><small>${note}</small></button>`).join('')}</div></section><section class="wb-side-section wb-scope-note"><header><h3>工作口径</h3></header><p>建言献策、心声诉求审核通过后进入事项处理；业务交流只做内容发布，不生成事项。</p></section></aside><main class="wb-center"><section class="wb-summary"><div><span>今日工作概览</span><strong>${pending + waiting + pendingPublications}</strong><small>项需要关注</small></div><div><span>已回复事项</span><strong>${replied}</strong><small>累计处理结果</small></div><div><span>专题办理</span><strong>${topicCount}</strong><small>用于集中处理同类事项</small></div><div><span>公开内容</span><strong>${publicPosts}</strong><small>当前已公开内容</small></div></section><section class="wb-panel wb-todo"><header><div><span class="wb-kicker">TODAY'S WORK</span><h2>我的工作队列</h2><p>按业务状态进入下一步处理，不展示人员派发关系。</p></div><button class="text-link" data-action="nav" data-id="handler-dispatch">查看事项处理${icon('arrow-up-right')}</button></header><div class="wb-queue">${queue.map(([count,title,note,symbol,page,action])=>`<article><span class="wb-queue-icon">${icon(symbol)}</span><div><strong>${title}</strong><p>${note}</p></div><span class="wb-queue-count">${count}</span><button class="btn btn-sm ${count > 0 ? 'btn-primary' : 'btn-secondary'}" data-action="nav" data-id="${page}">${action}${icon('chevron-right')}</button></article>`).join('') || '<div class="wb-empty"><span class="wb-empty-icon">'+icon('circle-check')+'</span><strong>今天没有需要优先处理的事项</strong><p>新的审核和事项会在进入队列后显示。</p></div>'}</div></section><section class="wb-panel wb-focus"><header><div><span class="wb-kicker">ITEMS IN FOCUS</span><h2>事项处理进度</h2><p>只展示当前状态和下一步动作。</p></div><div class="wb-tabs"><button class="active">全部</button><button>待处理 ${waiting}</button><button>处理中 ${active}</button><button>已回复 ${replied}</button></div></header><div class="wb-focus-list">${priority.map((item)=>`<button class="wb-focus-row" data-action="affair-view" data-id="${safe(item.id)}"><span class="wb-status-dot ${item.status === '待处理' ? 'is-waiting' : 'is-processing'}"></span><span><strong>${safe(item.title)}</strong><small>${safe(item.id)} · ${safe(item.category || '待分类')} ${topicForAffair(data, item.id) ? `· ${safe(topicForAffair(data, item.id).name)}` : ''}</small></span>${badgeFor(item.status)}${icon('chevron-right')}</button>`).join('') || '<div class="wb-empty">暂无待处理或处理中的事项</div>'}</div></section></main><aside class="wb-right"><section class="wb-panel wb-reminders"><header><div><span class="wb-kicker">REMINDERS</span><h2>运营提醒</h2></div><span class="badge">实时</span></header><div class="wb-reminder-list"><div><span class="wb-reminder-mark is-red"></span><p><strong>${pending} 条内容待审核</strong><small>风险判断完成后，诉求内容才会进入事项处理</small></p></div><div><span class="wb-reminder-mark is-gold"></span><p><strong>${pendingPublications} 项回复待公开</strong><small>确认公开范围后发布到回音壁</small></p></div><div><span class="wb-reminder-mark is-blue"></span><p><strong>${archived} 项已归档</strong><small>保留处理记录，可在事项处理内还原</small></p></div><div><span class="wb-reminder-mark is-green"></span><p><strong>${pendingUsers} 个用户待审核</strong><small>审核通过后才可进入职工端</small></p></div></div></section><section class="wb-panel wb-activity"><header><div><span class="wb-kicker">RECENT ACTIVITY</span><h2>最近动态</h2></div><button class="text-link" data-action="nav" data-id="logs">查看留痕</button></header><div class="wb-activity-list">${recent.map((item)=>`<div><i></i><span><strong>${safe(item.action)}</strong><p>${safe(item.detail)}</p></span><time>${safe(item.at)}</time></div>`).join('') || '<p class="muted">暂无操作记录</p>'}</div></section><section class="wb-panel wb-rule"><span>${icon('info')}</span><div><strong>当前业务规则</strong><p>事项管理员直接完成分类、专题归组和回复，不再经过承办、分办或转办。</p></div></section></aside></div>`;
     }
     return heading(state.role === 'leader' ? '领导驾驶舱' : '事项工作台', '按授权范围查看内容审核、事项分类和回复进度。') +
-      `<div class="grid grid-4">${[['敏感内容待审核', pending, 'content-review'], ['待处理事项', waiting, 'handler-dispatch'], ['处理中事项', active, 'handler-dispatch'], ['已回复事项', replied, 'handler-dispatch'], ['已归档事项', archived, 'handler-dispatch']].map(([label, value, page]) => `<button class="card stat stat-link" onclick="go('${page}')"><span class="stat-label">${label}</span><strong class="stat-value">${value}</strong><span class="stat-note">查看明细 →</span></button>`).join('')}</div>` +
+      `<div class="grid grid-4">${[['敏感内容待审核', pending, 'content-review'], ['待处理事项', waiting, 'handler-dispatch'], ['处理中事项', active, 'handler-dispatch'], ['已回复事项', replied, 'handler-dispatch'], ['无需处理事项', noAction, 'handler-dispatch']].map(([label, value, page]) => `<button class="card stat stat-link" onclick="go('${page}')"><span class="stat-label">${label}</span><strong class="stat-value">${value}</strong><span class="stat-note">查看明细 →</span></button>`).join('')}</div>` +
       `<div class="split-layout"><section class="card card-pad"><div class="card-title">当前重点及专题事项 ${button('全部事项', 'nav', 'handler-dispatch')}</div>${data.affairs.filter((item) => item.isKey || topicForAffair(data, item.id)).map((a) => `<div class="queue-item"><span class="queue-icon">${icon('clipboard-list')}</span><div><strong>${safe(a.title)}</strong><p>${safe(a.id)} · ${safe(a.category || '待分类')} · ${safe(topicForAffair(data, a.id)?.name || (a.topicTags || []).join('、') || '重点事项')}</p></div>${badgeFor(a.status)}</div>`).join('') || '<div class="empty">暂无重点或专题关联事项</div>'}</section><aside class="card card-pad"><div class="card-title">最新操作</div><div class="timeline">${data.audit.slice(0, 6).map((e) => `<div class="timeline-item"><span class="timeline-dot">${icon('activity')}</span><div><strong>${safe(e.action)}</strong><p>${safe(e.detail)}</p></div><small>${safe(e.at)}</small></div>`).join('') || '<p class="muted">暂无操作记录</p>'}</div></aside></div>`;
   }
   function contentTabs(items, selected, action, label, variant = '') {
@@ -492,10 +500,33 @@
     const events = (data.audit || []).filter((item) => String(item.target) === String(post.id) || (data.affairs || []).some((affair) => affair.postId === post.id && item.target === affair.id));
     const history = `<div class="ledger-history"><div><span class="timeline-dot">${icon('file-plus-2')}</span><p><strong>提交帖子</strong><small>${safe(post.time)} · ${safe(post.status)}</small></p></div>${events.map((item) => `<div><span class="timeline-dot">${icon('activity')}</span><p><strong>${safe(item.action)}</strong><small>${safe(item.detail)} · ${safe(item.role)} · ${safe(item.at)}</small></p></div>`).join('')}</div>${events.length ? '' : '<p class="engagement-formula">暂无其他审核或流转记录。</p>'}`;
     const body = `<div class="post-detail-tabs" role="tablist" aria-label="帖子详情">${tabs.map(([key, label]) => `<button type="button" role="tab" aria-selected="${selected === key}" class="${selected === key ? 'active' : ''}" data-action="post-detail-tab" data-id="${key}">${label}</button>`).join('')}</div><div class="post-detail-panel" role="tabpanel">${{ content, analysis, comments: commentDetails, history }[selected]}</div>`;
+    const hotIndex = cockpitHotIds.indexOf(String(post.id));
+    const hotNav = hotIndex >= 0
+      ? `<span class="cockpit-hot-nav-status">第 ${hotIndex + 1} / ${cockpitHotIds.length} 篇热点诉求</span>${button('返回热点列表', 'cockpit-hot-list', '', 'ghost')}${button('上一篇', 'cockpit-hot-prev', post.id, 'secondary')}${button('下一篇', 'cockpit-hot-next', post.id, 'primary')}`
+      : '';
     const actions = selected === 'content' && canAuditPost(post, data) && auditStatus(post) === '待审核'
       ? button('驳回', 'post-decision-reject', post.id) + button('审核通过', 'post-decision-approve', post.id, 'primary')
-      : publicationActions(post) + button('关闭', 'close', '');
+      : publicationActions(post) + hotNav + button('关闭', 'close', '');
     return modal('帖子详情 · ' + post.id, body, actions).replace('<section class="modal"', '<section class="modal post-detail-modal"');
+  }
+
+  function cockpitPostDetail(data, post) {
+    const metrics = interactionSummary(post, postComments(data, post.id));
+    const comments = postComments(data, post.id).filter((item) => item.status === '已发布').slice().reverse();
+    const body = `<article class="cockpit-post-reader"><header class="cockpit-post-reader-head"><div class="cockpit-post-reader-meta"><span>${safe(post.board || '帖子')}</span><i></i><small>${safe(post.author || '匿名用户')} · ${safe(post.time || '时间未记录')}</small></div><h2>${safe(post.title)}</h2></header><div class="cockpit-post-reader-copy"><p>${safe(post.body || post.excerpt || '暂无正文内容')}</p></div><div class="cockpit-post-reader-actions"><span>${icon('thumbs-up')} 点赞 ${metrics.likes}</span><span>${icon('message-circle')} 评论 ${metrics.comments}</span><span>${icon('star')} 收藏 ${metrics.favorites}</span><span>${icon('share-2')} 分享 ${metrics.shares}</span></div>${comments.length ? `<section class="cockpit-post-reader-comments"><header><h3>评论</h3><span>${comments.length} 条可见评论</span></header>${comments.slice(0, 8).map((item) => `<article><div><strong>${safe(item.author || '职工')}</strong><small>${safe(item.createdAt || '')}</small></div><p>${safe(item.text)}</p></article>`).join('')}</section>` : '<p class="cockpit-post-reader-empty">暂无公开评论</p>'}</article>`;
+    const hotIndex = cockpitHotIds.indexOf(String(post.id));
+    const hotNav = hotIndex >= 0
+      ? `<span class="cockpit-hot-nav-status">第 ${hotIndex + 1} / ${cockpitHotIds.length} 篇热点诉求</span>${button('返回热点列表', 'cockpit-hot-list', '', 'ghost')}${button('上一篇', 'cockpit-hot-prev', post.id, 'secondary')}${button('下一篇', 'cockpit-hot-next', post.id, 'primary')}`
+      : '';
+    return modal('帖子详情', body, hotNav + button('关闭', 'close', '')).replace('<section class="modal"', '<section class="modal post-detail-modal cockpit-post-reader-modal"');
+  }
+
+  function cockpitHotList(data) {
+    const model = leaderModel(leaderScopedData(data));
+    const rows = model.hotPosts;
+    cockpitHotIds = rows.map((item) => String(item.post.id));
+    const body = `<div class="cockpit-hot-list-modal-head"><div><strong>按综合关注度排序</strong><span>浏览、点赞、评论、收藏和分享共同计算</span></div><span class="badge">共 ${rows.length} 篇</span></div><div class="cockpit-hot-list cockpit-hot-list-expanded">${rows.map((item, index) => `<button class="cockpit-hot-row" data-action="cockpit-post-detail" data-id="${safe(item.post.id)}"><b>${index + 1}</b><span><strong>${safe(item.post.title)}</strong><small>${safe(item.post.board)} · 浏览 ${item.engagement.views || 0} · 点赞 ${item.engagement.likes || 0} · 评论 ${item.comments} · 收藏 ${item.engagement.favorites || 0} · 分享 ${item.engagement.shares || 0}</small></span><em>${item.score}</em>${icon('chevron-right')}</button>`).join('') || '<p class="muted">当前周期暂无热点诉求</p>'}</div>`;
+    return modal('更多热点诉求', body, button('关闭', 'close', ''));
   }
   function contentReviewDetail(data, post) {
     const risk = contentRisk(post, data);
@@ -1026,26 +1057,95 @@
     const data = db();
     const items = data.affairs;
     const replied = items.filter((item) => item.status === '已回复').length;
-    const archived = items.filter((item) => item.status === '已归档').length;
-    const metrics = [['发帖量', data.posts.length], ['事项总量', items.length], ['回复率', items.length ? `${Math.round(replied / items.length * 100)}%` : '0%'], ['已归档', archived]];
+    const noAction = items.filter((item) => ['无需处理', '已归档'].includes(item.status)).length;
+    const metrics = [['发帖量', data.posts.length], ['事项总量', items.length], ['回复率', items.length ? `${Math.round(replied / items.length * 100)}%` : '0%'], ['无需处理', noAction]];
     return heading(state.role === 'leader' ? '事项运行统计' : state.role === 'handler' ? '部门办理统计' : '综合统计', '当前演示数据的实时统计；正式系统按授权组织和时间范围汇总。') +
       `<div class="grid grid-4">${metrics.map(([label, value]) => `<div class="card stat"><span class="stat-label">${label}</span><strong class="stat-value">${value}</strong></div>`).join('')}</div>` +
       `<div class="section-title"><h2>事项状态分布</h2></div>` + list(['状态', '数量', '事项'], ['待处理', '处理中', '已回复', '已归档'].map((status) => { const matches = items.filter((item) => item.status === status); return `<tr><td>${badgeFor(status)}</td><td>${matches.length}</td><td>${safe(matches.map((item) => item.id).join('、') || '暂无')}</td></tr>`; }));
+  }
+  function leaderIsoDate(value) {
+    const text = String(value || '');
+    const full = text.match(/(20\d{2})[-\/.](\d{1,2})[-\/.](\d{1,2})/);
+    if (full) return `${full[1]}-${String(full[2]).padStart(2, '0')}-${String(full[3]).padStart(2, '0')}`;
+    const monthDay = text.match(/(\d{1,2})月(\d{1,2})/);
+    if (monthDay) return `2026-${String(monthDay[1]).padStart(2, '0')}-${String(monthDay[2]).padStart(2, '0')}`;
+    return '';
+  }
+  function leaderAddDays(value, days) {
+    const [year, month, day] = String(value || '').split('-').map(Number);
+    if (!year || !month || !day) return '';
+    // Use UTC calendar arithmetic so browser timezone cannot shift a date label backward.
+    const date = new Date(Date.UTC(year, month - 1, day));
+    date.setUTCDate(date.getUTCDate() + days);
+    return date.toISOString().slice(0, 10);
+  }
+  function leaderPeriodBounds(data) {
+    const dates = [...(data.posts || []), ...(data.affairs || []), ...(data.echoPublications || [])].map((item) => leaderIsoDate(item.createdAt || item.time || item.publishedAt)).filter(Boolean).sort();
+    const end = leaderPeriod === '自定义' && leaderCustomTo ? leaderCustomTo : dates.at(-1) || '2026-09-20';
+    if (leaderPeriod === '自定义') return [leaderCustomFrom || end, end];
+    if (leaderPeriod === '本周') return [leaderAddDays(end, -6), end];
+    if (leaderPeriod === '本季度') {
+      const month = Number(end.slice(5, 7));
+      return [`${end.slice(0, 4)}-${String(Math.floor((month - 1) / 3) * 3 + 1).padStart(2, '0')}-01`, end];
+    }
+    return [`${end.slice(0, 7)}-01`, end];
+  }
+  function leaderScopedData(data) {
+    const [from, to] = leaderPeriodBounds(data);
+    const inRange = (item, fieldNames) => {
+      const date = leaderIsoDate(fieldNames.map((field) => item?.[field]).find(Boolean));
+      return Boolean(date && date >= from && date <= to);
+    };
+    return {
+      ...data,
+      posts: (data.posts || []).filter((item) => inRange(item, ['createdAt', 'time'])).map((item) => ({
+        ...item,
+        engagement: leaderScopedEngagement(item.engagement, from, to)
+      })),
+      affairs: (data.affairs || []).filter((item) => inRange(item, ['createdAt', 'reviewedAt', 'updatedAt'])),
+      comments: (data.comments || []).filter((item) => inRange(item, ['createdAt', 'time'])),
+      echoPublications: (data.echoPublications || []).filter((item) => inRange(item, ['publishedAt', 'createdAt'])),
+      __leaderPeriod: { from, to }
+    };
+  }
+  function leaderPeriodText(data) {
+    const period = data.__leaderPeriod || {};
+    const from = period.from || '';
+    const to = period.to || '';
+    if (!from || !to) return leaderPeriod;
+    return `${from.replace(/-/g, '.')} 至 ${to.replace(/-/g, '.')}`;
+  }
+  function leaderScopedEngagement(engagement, from, to) {
+    const source = engagement || PrototypeData.emptyEngagement();
+    const daily = (source.daily || []).filter((point) => {
+      const date = leaderIsoDate(point.date);
+      return date && date >= from && date <= to;
+    });
+    const sum = (field) => daily.reduce((total, point) => total + Number(point[field] || 0), 0);
+    return {
+      ...source,
+      views: sum('views'),
+      likes: sum('likes'),
+      favorites: sum('favorites'),
+      shares: sum('shares'),
+      historicComments: sum('comments'),
+      daily
+    };
   }
   function leaderModel(data) {
     const pending = data.affairs.filter((item) => item.status === '待处理');
     const processing = data.affairs.filter((item) => item.status === '处理中');
     const replied = data.affairs.filter((item) => item.status === '已回复');
-    const archived = data.affairs.filter((item) => item.status === '已归档');
+    const noAction = data.affairs.filter((item) => ['无需处理', '已归档'].includes(item.status));
     const key = data.affairs.filter((item) => item.isKey);
     const topics = affairTopics(data);
     const published = (data.echoPublications || []).filter((item) => item.status === '已发布');
     const hotPosts = data.posts.map((post) => {
       const engagement = post.engagement || PrototypeData.emptyEngagement();
       const comments = (engagement.historicComments || 0) + postComments(data, post.id).filter((item) => item.status === '已发布').length;
-      return { post, engagement, comments, score: (engagement.views || 0) + (engagement.likes || 0) * 5 + comments * 4 + (engagement.shares || 0) * 6 };
+      return { post, engagement, comments, score: (engagement.views || 0) + (engagement.likes || 0) * 5 + (engagement.favorites || 0) * 3 + comments * 4 + (engagement.shares || 0) * 6 };
     }).sort((a, b) => b.score - a.score);
-    return { pending, processing, replied, archived, key, topics, published, hotPosts };
+    return { pending, processing, replied, noAction, key, topics, published, hotPosts };
   }
   function leaderMetric(label, value, note, tone = '') {
     return `<div class="card stat leader-stat ${tone}"><span class="stat-label">${safe(label)}</span><strong class="stat-value">${safe(value)}</strong><span class="stat-note">${safe(note)}</span></div>`;
@@ -1060,38 +1160,141 @@
     return rows.map(([label, value, tone = '']) => `<div class="leader-chart-row"><header><span>${safe(label)}</span><strong>${value}</strong></header><div class="leader-chart-track"><i class="${tone}" style="width:${Math.max(value ? 7 : 0, value / Math.max(1, total) * 100)}%"></i></div></div>`).join('') || '<p class="muted">暂无可统计数据</p>';
   }
   function leaderDashboard() {
-    const data = db(), model = leaderModel(data), total = data.affairs.length;
+    const data = leaderScopedData(db()), model = leaderModel(data), total = data.affairs.length;
+    const periodText = leaderPeriodText(data);
+    const [periodFrom, periodTo] = [data.__leaderPeriod?.from, data.__leaderPeriod?.to];
+    const daily = new Map();
+    const dailyDetail = new Map();
+    for (const item of model.hotPosts) {
+      for (const point of item.engagement.daily || []) {
+        const date = leaderIsoDate(point.date);
+        if (!date || (periodFrom && date < periodFrom) || (periodTo && date > periodTo)) continue;
+        const bucket = leaderPeriod === '本季度' ? date.slice(0, 7) : date;
+        const views = Number(point.views || 0);
+        const likes = Number(point.likes || 0);
+        const comments = Number(point.comments || 0);
+        const favorites = Number(point.favorites || 0);
+        const shares = Number(point.shares || 0);
+        daily.set(bucket, (daily.get(bucket) || 0) + views + likes + comments + favorites + shares);
+        const detail = dailyDetail.get(bucket) || { views: 0, likes: 0, comments: 0, favorites: 0, shares: 0 };
+        detail.views += views;
+        detail.likes += likes;
+        detail.comments += comments;
+        detail.favorites += favorites;
+        detail.shares += shares;
+        dailyDetail.set(bucket, detail);
+      }
+    }
+    if (leaderPeriod === '本周' && periodFrom && periodTo) {
+      // Keep the weekly axis stable: always render seven calendar days, including zero-value days.
+      const weekDates = Array.from({ length: 7 }, (_, index) => leaderAddDays(periodFrom, index));
+      const week = new Map(weekDates.map((date) => [date, daily.get(date) || 0]));
+      const weekDetails = new Map(weekDates.map((date) => [date, dailyDetail.get(date) || { views: 0, likes: 0, comments: 0, favorites: 0, shares: 0 }]));
+      daily.clear();
+      dailyDetail.clear();
+      for (const [date, value] of week) daily.set(date, value);
+      for (const [date, detail] of weekDetails) dailyDetail.set(date, detail);
+    }
+    const trend = [...daily.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(-7);
+    const trendLabel = (date) => date.length === 7 ? `${date.slice(5)}月` : date.slice(5);
+    const maxTrend = Math.max(1, ...trend.map(([, value]) => value));
+    const trendLinePoints = trend.map(([, value], index) => {
+      const x = trend.length ? (index + 0.5) / trend.length * 100 : 50;
+      const y = 96 - value / maxTrend * 88;
+      return `${x},${y}`;
+    }).join(' ');
+    const trendDetails = (date) => dailyDetail.get(date) || { views: 0, likes: 0, comments: 0, favorites: 0, shares: 0 };
     const publicPosts = data.posts.filter((item) => !['待审核', '退回修改', '已驳回', '已隐藏'].includes(item.status));
-    const participants = new Set(publicPosts.map((item) => item.authorId || item.author).filter(Boolean)).size;
+    const postAuthorIds = new Set(publicPosts.map((item) => item.authorId || item.author).filter(Boolean));
+    const commentAuthorIds = new Set(data.posts.flatMap((post) => postComments(data, post.id).filter((item) => item.status === '已发布').map((item) => item.authorId || item.author).filter(Boolean)));
+    const participants = new Set([...postAuthorIds, ...commentAuthorIds]).size;
     const eligibleUsers = Math.max(participants, (data.accounts || []).filter((item) => item.status === 'approved').length);
     const participationRate = eligibleUsers ? `${Math.round(participants / eligibleUsers * 100)}%` : '0%';
+    const interactionCount = data.posts.reduce((sum, post) => { const engagement = post.engagement || PrototypeData.emptyEngagement(); return sum + (engagement.likes || 0) + (engagement.favorites || 0) + (engagement.shares || 0) + postComments(data, post.id).filter((item) => item.status === '已发布').length; }, 0);
     const replyRate = total ? `${Math.round(model.replied.length / total * 100)}%` : '0%';
-    const focus = data.affairs.filter((item) => item.isKey || topicForAffair(data, item.id)).sort((a, b) => Number(b.isKey) - Number(a.isKey)).slice(0, 5);
-    const metrics = [
-      ['users-round', '职工参与率', participationRate, `${participants} 人参与 / ${eligibleUsers} 人已启用`, '参与用户去重统计'],
-      ['message-square-reply', '回复率', replyRate, `已回复 ${model.replied.length} 项`, '已回复事项 / 全部事项'],
-      ['star', '重点事项', model.key.length, '线下研究时优先关注', '标记为重点的事项'],
-      ['layers-3', '问题专题', model.topics.length, '人工归组、统一回复', '已建立的问题专题'],
-      ['messages-square', '处理中', model.processing.length, '正在研究并整理回复', '已分类、尚未回复的事项'],
-      ['archive', '已归档', model.archived.length, '保留历史处置记录', '已归档并记录理由的事项'],
-      ['megaphone', '回音壁发布', model.published.length, '仅统计显式发布的公开回复', '已发布的回音壁记录']
-    ];
-    const statusRows = [
-      ['待处理', model.pending.length, 'is-gold'],
-      ['处理中', model.processing.length, 'is-blue'],
-      ['已回复', model.replied.length, 'is-green'],
-      ['已归档', model.archived.length, 'is-gray']
-    ];
+    const responseTimes = model.replied.map((item) => { const start = Date.parse(item.createdAt || ''); const end = Date.parse(item.repliedAt || ''); return Number.isFinite(start) && Number.isFinite(end) && end >= start ? (end - start) / 86400000 : null; }).filter((value) => value !== null);
+    const avgResponse = responseTimes.length ? `${(responseTimes.reduce((sum, value) => sum + value, 0) / responseTimes.length).toFixed(1)} 天` : '暂无';
+    const topHot = model.hotPosts[0];
     const categoryRows = [...new Set(data.affairs.map((item) => item.category || '待分类'))].map((category) => [category, data.affairs.filter((item) => (item.category || '待分类') === category).length]).sort((a, b) => b[1] - a[1]).slice(0, 5);
-    const reportActions = `<div class="leader-report-actions"><button class="btn btn-secondary" onclick="showToast('领导视图报告已生成，可在报表中心下载')">${icon('file-chart-column')}生成报告</button><button class="btn btn-primary" onclick="showToast('报告下载任务已提交')">${icon('download')}下载报告</button></div>`;
-    return heading('数据驾驶舱', '从职工参与、建议转化到办理成效，查看授权组织范围内的平台运行情况。', reportActions) +
-      `<div class="leader-scope-bar"><div>${icon('calendar-range')}<span>统计周期</span><strong>2026年9月1日 - 9月20日</strong></div><div>${icon('building-2')}<span>报送范围</span><strong>省社本级及授权组织</strong></div><button class="btn btn-sm btn-secondary" data-action="nav" data-id="leader-statistics">${icon('sliders-horizontal')}调整统计范围</button></div>` +
-      `<div class="leader-brief-strip"><strong>${icon('sparkles')}本期管理摘要</strong><span>共登记 ${total} 项事项</span><span class="is-positive">${icon('trending-up')}已回复 ${model.replied.length} 项</span><span class="is-warning">${icon('tags')}重点 ${model.key.length} 项 · 人工专题 ${model.topics.length} 个</span><span>${icon('archive')}已归档 ${model.archived.length} 项</span></div>` +
-      `<section class="leader-kpi-grid">${metrics.map(([symbol, label, value, note, formula], index) => `<div class="leader-kpi ${index === 1 || index === 5 ? 'is-good' : index === 0 ? 'is-primary' : ''}"><header>${icon(symbol)}<span>${safe(label)}</span><i title="${safe(formula)}">${icon('info')}</i></header><strong>${safe(value)}</strong><p>${safe(note)}</p></div>`).join('')}</section>` +
-      `<div class="leader-chart-grid"><section class="card card-pad"><div class="card-title"><span>事项状态分布<small>按管理端处置状态统计</small></span><span class="badge">共 ${total} 项</span></div><div class="leader-chart-list">${leaderChartRows(statusRows, Math.max(1, total))}</div></section><section class="card card-pad"><div class="card-title"><span>事项分类分布<small>管理端人工分类标记</small></span><span class="badge">前 5 类</span></div><div class="leader-chart-list">${leaderChartRows(categoryRows, Math.max(1, ...categoryRows.map(([, value]) => value)))}</div></section></div>` +
-      `<div class="leader-dashboard-grid leader-overview-grid"><section class="card card-pad"><div class="card-title">热点问题排行 <span class="badge">按浏览、评论、点赞综合热度</span></div><div class="leader-hot-list">${model.hotPosts.slice(0, 5).map((item, index) => `<div class="leader-hot-item"><span class="leader-rank">${index + 1}</span><div><strong>${safe(item.post.title)}</strong><p>${safe(item.post.board)} · 浏览 ${item.engagement.views || 0} · 点赞 ${item.engagement.likes || 0} · 评论 ${item.comments}</p></div><span class="badge ${index === 0 ? 'red' : ''}">${item.score}</span></div>`).join('') || '<p class="muted">暂无热点数据</p>'}</div></section><aside class="card card-pad leader-conversion"><div class="card-title">事项处置状态</div><div class="leader-funnel"><div><span>待处理</span><strong>${model.pending.length}</strong></div><i></i><div><span>处理中</span><strong>${model.processing.length}</strong></div><i></i><div><span>已回复</span><strong>${model.replied.length}</strong></div></div><div class="leader-conversion-note">${icon('activity')} 已归档 ${model.archived.length} 项，回音壁已发布 ${model.published.length} 项</div></aside></div>` +
-      `<div class="leader-section-head"><div><h2>重点与问题专题摘要</h2><p>优先展示需线下研究或统一回复的事项</p></div><button class="text-link" data-action="nav" data-id="leader-key-affairs">查看全部</button></div><div class="leader-focus-list">${focus.map((item) => { const linkedTopic = topicForAffair(data, item.id); return `<article><div><span>${badgeFor(item.isKey ? '重点事项' : '专题关联')}</span><strong>${safe(item.title)}</strong><small>${safe(item.id)} · ${safe(item.category || '待分类')}</small></div><div class="leader-focus-progress"><span>${safe(item.internalNote || '已纳入集中研究清单')}</span><small>${safe(linkedTopic?.name || (item.topicTags || []).join('、') || '暂无主题标签')}</small></div><div>${badgeFor(item.status)}${button('查看', 'affair-detail', item.id)}</div></article>`; }).join('') || '<div class="empty">暂无重点或专题关联事项</div>'}</div>` +
-      `<section class="leader-report-band"><div>${icon('file-chart-column')}<span><strong>领导视图报告</strong><small>包含职工参与、事项状态、分类结构、重点事项、问题专题及回音壁发布情况</small></span></div><div><span>统计周期：本月</span><span>报送范围：授权组织</span></div>${reportActions}</section>`;
+    const categoryColors = ['#b52c2f', '#c59a4a', '#2f7d5b', '#8c6d63', '#6f8496'];
+    let categoryCursor = 0;
+    const categoryPieStops = categoryRows.map(([, value], index) => { const start = categoryCursor; categoryCursor += total ? value / total * 100 : 0; return `${categoryColors[index % categoryColors.length]} ${start}% ${categoryCursor}%`; }).join(', ');
+    const categoryLegend = categoryRows.map(([label, value], index) => { const percent = total ? Math.round(value / total * 100) : 0; const color = categoryColors[index % categoryColors.length]; return `<div class="cockpit-category-legend-item"><header><i style="background:${color}"></i><span>${safe(label)}</span><strong>${value} 项 · ${percent}%</strong></header><p><b style="width:${percent}%;background:${color}"></b></p></div>`; }).join('');
+    const statusRows = [['待处理', model.pending.length, 'is-gold'], ['处理中', model.processing.length, 'is-blue'], ['已回复', model.replied.length, 'is-green'], ['无需处理', model.noAction.length, 'is-gray']];
+    const hotRows = model.hotPosts.slice(0, 5);
+    cockpitHotIds = model.hotPosts.map((item) => String(item.post.id));
+    const accountsById = new Map((data.accounts || []).map((item) => [String(item.id), item]));
+    const participantByOrg = new Map();
+    const addParticipant = (key, department) => {
+      const name = department || '未标注组织';
+      if (!participantByOrg.has(name)) participantByOrg.set(name, new Set());
+      participantByOrg.get(name).add(String(key));
+    };
+    for (const post of data.posts) {
+      const account = accountsById.get(String(post.authorId));
+      if (post.authorId || account?.department || post.department) addParticipant(post.authorId || `post-${post.id}`, post.department || account?.department);
+    }
+    for (const comment of data.comments) {
+      if (comment.status !== '已发布') continue;
+      const account = accountsById.get(String(comment.authorId));
+      if (comment.authorId || account?.department || comment.department) addParticipant(comment.authorId || `comment-${comment.id}`, comment.department || account?.department);
+    }
+    const enabledByOrg = new Map();
+    for (const account of data.accounts || []) {
+      if (account.status !== 'approved' || !account.department) continue;
+      enabledByOrg.set(account.department, (enabledByOrg.get(account.department) || 0) + 1);
+    }
+    const orgNames = [...new Set([...enabledByOrg.keys(), ...participantByOrg.keys()])];
+    const orgRows = orgNames.map((name) => {
+      const participating = participantByOrg.get(name)?.size || 0;
+      const enabled = enabledByOrg.get(name) || 0;
+      return [name, participating, enabled, enabled ? Math.min(100, Math.round(participating / enabled * 100)) : 0];
+    }).sort((a, b) => b[3] - a[3]).slice(0, 5);
+    const periodPublishedCount = model.published.length;
+    const affairKey = (item, index) => String(item.affairId || item.id || `feedback-${index}`);
+    const repliedIds = new Set(model.replied.map((item, index) => affairKey(item, index)));
+    const publishedIds = new Set(model.published.map((item) => item.affairId).filter(Boolean).map(String));
+    // “已回复”是事项办理的正式结果；回音壁发布只记录后续公开动作，不重复计入结果数。
+    const publicReplyIds = new Set(model.replied.filter((item) => item.feedback === '公开答复').map((item, index) => affairKey(item, index)));
+    const chainPublishedIds = new Set([...publishedIds].filter((id) => repliedIds.has(id)));
+    const canPublic = new Set([...publicReplyIds, ...chainPublishedIds]).size;
+    const publishedCount = chainPublishedIds.size;
+    const feedbackResultCount = model.replied.length;
+    const feedbackTouchCount = model.published.filter((item) => chainPublishedIds.has(String(item.affairId))).reduce((sum, item) => {
+      const metrics = interactionSummary(item, postComments(data, 6000 + Number(item.sourcePostId || 0)));
+      return sum + metrics.views + metrics.comments + metrics.likes + metrics.favorites + metrics.shares;
+    }, 0);
+    const feedbackFlowHelp = `<span class="cockpit-card-help" tabindex="0" aria-label="反馈触达链路统计口径"><i data-lucide="info" class="icon"></i><span class="cockpit-card-help-popover"><strong>已回复事项</strong> 统计周期内状态为“已回复”的事项；事项完成正式答复并记录回复时间后，才进入反馈判断。<br><strong>可公开</strong> 已回复事项中答复方式为“公开答复”的事项，并按事项编号去重。<br><strong>已公开</strong> 已回复事项中已在回音壁发布成功的记录数。<br><strong>被触达</strong> 已公开内容在职工端产生的浏览、评论、点赞、收藏、分享次数合计，按行为次数统计，不去重；同一职工重复打开或重复互动会重复计数。</span></span>`;
+    const publicListHelp = `<span class="cockpit-card-help" tabindex="0" aria-label="最近公开反馈统计口径"><i data-lucide="info" class="icon"></i><span class="cockpit-card-help-popover"><strong>统计来源</strong> 来自回音壁公开反馈记录。<br><strong>进入条件</strong> 事项完成回复，答复方式为“公开答复”，并在回音壁发布成功。<br><strong>当前列表</strong> 只展示当前统计周期内已发布的前 4 条记录，点击可查看公开内容详情。</span></span>`;
+    // 专题办理只复用“事项处理 > 办理中”的真实专题队列，不再把事项分类冒充高频问题。
+    const processingAffairs = data.affairs.filter((item) => item.status === '处理中');
+    const topicRows = model.topics.map((topic) => {
+      const items = processingAffairs.filter((affair) => (topic.affairIds || []).some((itemId) => String(itemId) === String(affair.id)));
+      return { topic, items };
+    }).filter((row) => row.items.length).sort((a, b) => b.items.length - a.items.length);
+    const topicLinkedCount = topicRows.reduce((sum, row) => sum + row.items.length, 0);
+    const ungroupedProcessingCount = processingAffairs.filter((item) => !topicForAffair(data, item.id)).length;
+    const orgActions = '<span class="cockpit-org-actions"><span class="cockpit-org-help" tabindex="0" aria-label="组织参与统计口径"><i data-lucide="info" class="icon"></i><span class="cockpit-org-help-popover"><strong>本期参与人数</strong> 本统计周期内至少发帖、评论、点赞、收藏或分享一次的职工人数。<br><strong>组织职工人数</strong> 该组织中已登记且可以正常使用平台的职工人数。<br><strong>参与率</strong> 本期参与人数 ÷ 组织职工人数 × 100%。没有组织信息的职工归入“未标注组织”。</span></span><button class="btn btn-sm btn-secondary" data-action="nav" data-id="organization">查看组织</button></span>';
+    const section = (index, title, subtitle) => `<div class="cockpit-section-head"><div><span class="cockpit-section-index">${index}</span><div><h2>${title}</h2><p>${subtitle}</p></div></div></div>`;
+    const cardTitle = (title, subtitle, tag = '结构', extra = '') => `<div class="cockpit-card-head"><div><div class="cockpit-card-title"><h3>${title}</h3>${tag ? `<span class="cockpit-tag ${tag === '动作' ? 'is-action' : tag === '趋势' ? 'is-trend' : tag === '结果' ? 'is-result' : ''}">${tag}</span>` : ''}</div><p>${subtitle}</p></div>${extra}</div>`;
+    const topicRowsMarkup = topicRows.slice(0, 4).map(({ topic, items }) => `<button class="cockpit-topic-row" data-action="affair-topic-view" data-id="${safe(topic.id)}"><span class="cockpit-topic-mark">${icon('layers-3')}</span><span><strong>${safe(topic.name)}</strong><small>${items.length} 项处理中 · ${safe(topic.summary || '暂无专题说明')}</small></span><em>查看专题</em>${icon('chevron-right')}</button>`).join('');
+    const topicCard = `<div class="card card-pad cockpit-topic-card">${cardTitle('专题办理概览', '同步事项处理 > 办理中的问题专题和未归组事项', '动作', `<span class="cockpit-card-actions"><span class="badge">${topicRows.length} 个专题</span><button class="text-link" data-action="cockpit-topic-workbench">进入专题办理 ${icon('arrow-up-right')}</button></span>`)}<div class="cockpit-topic-summary"><div><strong>${topicRows.length}</strong><span>已建立专题</span></div><div><strong>${topicLinkedCount}</strong><span>专题关联事项</span></div><div><strong>${ungroupedProcessingCount}</strong><span>未归组事项</span></div></div><div class="cockpit-topic-list"><header><span>办理中的问题专题</span><small>可查看关联事项和统一回复</small></header>${topicRowsMarkup || `<div class="cockpit-topic-empty"><span>${icon('inbox')}</span><strong>当前没有已建立专题</strong><p>${ungroupedProcessingCount ? `还有 ${ungroupedProcessingCount} 项办理中事项未归组，可在事项处理 > 办理中建立专题。` : '办理中的事项会在建立专题后显示在这里。'}</p></div>`}</div>${topicRows.length ? `<div class="cockpit-callout">${icon('info')}<span>专题由事项管理员在“事项处理 > 办理中”建立、归组并统一回复。</span><button class="text-link" data-action="cockpit-topic-workbench">查看办理中</button></div>` : `<div class="cockpit-callout is-warning">${icon('clock-3')}<span>专题办理数据只统计当前周期内处于“处理中”的事项。</span></div>`}</div>`;
+    const categoryCard = `<div class="card card-pad cockpit-category-card">${cardTitle('事项分类分布', '按登记事项分类查看事项结构', '结构', `<span class="badge">${total} 项</span>`)}${categoryRows.length ? `<div class="cockpit-category-chart"><div class="cockpit-category-pie" role="img" aria-label="事项分类分布：${safe(categoryRows.map(([label, value]) => `${label} ${value} 项`).join('，'))}" style="background:conic-gradient(${categoryPieStops})"><span>${total}<small>项事项</small></span></div><div class="cockpit-category-legend">${categoryLegend}</div></div>` : '<p class="muted cockpit-category-empty">暂无事项分类数据</p>'}</div>`;
+    const metricCards = [
+      ['users-round', '职工活跃度', participationRate, `${participants} 人参与 / ${eligibleUsers} 人已启用`, 'is-primary', `职工活跃度 = 去重参与职工数（发帖或评论） ÷ 已启用职工数 × 100%；本期 ${participants} ÷ ${eligibleUsers} = ${participationRate}`, 'participation'],
+      ['flame', '热点诉求', topHot ? topHot.score : '暂无', topHot ? topHot.post.title : '暂无热点数据', 'is-warm', '热点关注度 = 浏览量 + 点赞量 × 5 + 收藏量 × 3 + 评论量 × 4 + 分享量 × 6；评论包含历史评论和已发布评论', 'focus'],
+      ['message-square-reply', '回复率', replyRate, `已回复 ${model.replied.length} / 登记 ${total} 项`, 'is-good', `回复率 = 已回复事项数 ÷ 登记事项总数 × 100%；本期 ${model.replied.length} ÷ ${total} = ${replyRate}`, 'process'],
+      ['timer', '平均响应时长', avgResponse, responseTimes.length ? `基于 ${responseTimes.length} 项已回复事项` : '暂无可计算数据', 'is-soft', `平均响应时长 = 有效事项的（首次回复时间 - 登记时间）之和 ÷ 有效已回复事项数；本期样本 ${responseTimes.length} 项`, 'process'],
+      ['megaphone', '回音壁发布', periodPublishedCount, '本期已公开反馈', 'is-public', `回音壁发布 = 统计周期内状态为“已发布”的公开反馈记录数；本期共 ${periodPublishedCount} 条`, 'feedback']
+    ];
+    return heading('数据驾驶舱', '围绕职工参与、诉求关注、诉求办理、公开反馈和运营趋势，查看授权组织范围内的平台运行情况。') +
+      `<div class="cockpit-scope"><div class="cockpit-scope-left">${icon('calendar-range')}<span>统计周期</span><small class="cockpit-period-help">应用于全部板块</small><div class="cockpit-periods" role="group" aria-label="统计周期">${['本周', '本月', '本季度', '自定义'].map((period) => `<button class="${leaderPeriod === period ? 'active' : ''}" data-action="leader-period-set" data-id="${period}">${period}</button>`).join('')}</div>${leaderPeriod === '自定义' ? `<div class="cockpit-custom-period"><input class="input" id="wf-leader-period-from" type="date" value="${safe(leaderCustomFrom)}" aria-label="开始日期"><span>至</span><input class="input" id="wf-leader-period-to" type="date" value="${safe(leaderCustomTo)}" aria-label="结束日期"><button class="btn btn-sm btn-primary" data-action="leader-period-apply">应用</button></div>` : ''}<span class="cockpit-period-range">${safe(periodText)}</span></div><div class="cockpit-scope-right"><span>授权组织范围：省社本级及授权组织</span><button class="btn btn-sm btn-secondary" onclick="showToast('驾驶舱数据已导出')">${icon('download')}导出数据</button></div></div>` +
+      `<section class="cockpit-result-section">${section('00', '首屏核心指标', '先看参与、关注、办理与公开反馈的结果')}<div class="cockpit-kpis">${metricCards.map(([symbol, label, value, note, tone, formula, target]) => `<button class="cockpit-kpi ${tone}" data-action="cockpit-jump" data-id="${target}"><header>${icon(symbol)}<span>${label}</span><i class="metric-help" tabindex="0" data-tip="${safe(formula)}" aria-label="${label}统计口径">${icon('info')}</i></header><strong>${safe(value)}</strong><p>${safe(note)}</p><small>查看明细 ${icon('arrow-up-right')}</small></button>`).join('')}</div></section>` +
+      `<section class="cockpit-section">${section('01', '职工参与', '平台有没有被职工真正使用？', '参与层 · 看使用')}<div class="cockpit-grid cockpit-grid-participation"><div class="card card-pad cockpit-participation-card">${cardTitle('参与概览', '统计本期发帖、评论或互动过的职工', '', '<span class="badge">当前周期</span>')}<div class="cockpit-participation-summary"><div class="cockpit-participation-message"><span>本期平台参与情况</span><strong>有 <em>${participants}</em> 位职工参与平台</strong><p>在 ${eligibleUsers} 位已登记职工中，参与率为 <b>${participationRate}</b></p></div><div class="cockpit-participation-coverage"><div><strong>${participants}</strong><span>本期参与人数</span></div><div><strong>${eligibleUsers}</strong><span>登记职工人数</span></div><div><strong>${participationRate}</strong><span>参与率</span></div></div></div><div class="cockpit-participation-stats"><div><strong>${postAuthorIds.size}</strong><span>发帖人数</span></div><div><strong>${commentAuthorIds.size}</strong><span>评论人数</span></div><div><strong>${interactionCount}</strong><span>互动次数</span></div></div><div class="cockpit-participation-footnote">参与人数按周期内至少完成一次发帖、评论或互动的职工去重统计。</div></div><div class="card card-pad cockpit-participation-trend">${cardTitle('参与趋势', '每日互动热度 = 浏览量 + 点赞量 + 收藏量 + 分享量 + 评论量', '趋势')}<div class="cockpit-bars-head"><span>每日互动热度指数</span></div><div class="cockpit-bars-legend"><span><i class="is-bar"></i>每日互动热度</span><span><i class="is-line"></i>变化趋势</span></div><div class="cockpit-bars"><svg class="cockpit-bars-line" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="互动热度变化趋势"><polyline points="${trendLinePoints}"></polyline></svg>${trend.map(([date, value]) => { const detail = trendDetails(date); const label = trendLabel(date); const aria = `${label}，互动热度 ${value}，浏览 ${detail.views}，点赞 ${detail.likes}，评论 ${detail.comments}，收藏 ${detail.favorites}，分享 ${detail.shares}`; return `<div class="cockpit-bar" tabindex="0" aria-label="${safe(aria)}"><span class="cockpit-bar-tip" role="tooltip"><b>${safe(label)}</b><strong>互动热度 ${value}</strong><small>浏览 ${detail.views} · 点赞 ${detail.likes} · 评论 ${detail.comments}，收藏 ${detail.favorites}，分享 ${detail.shares}</small></span><strong>${value}</strong><i class="${value ? '' : 'is-empty'}" style="height:${value ? Math.max(10, value / maxTrend * 100) : 0}%"></i><small>${safe(label)}</small></div>`; }).join('') || '<p class="muted">暂无趋势数据</p>'}</div></div></div><div class="card card-pad cockpit-org-card">${cardTitle('组织参与情况', '看各组织有多少人参与平台', '', orgActions)}<div class="cockpit-org-summary"><span>组织数量 <strong>${orgRows.length}</strong> 个</span><span>平均参与率 <strong>${orgRows.length ? Math.round(orgRows.reduce((sum, [, , , rate]) => sum + rate, 0) / orgRows.length) : 0}%</strong></span></div><table class="cockpit-table"><thead><tr><th>组织</th><th>本期参与人数</th><th>组织职工人数</th><th>参与率</th></tr></thead><tbody>${orgRows.map(([name, participating, enabled, rate], index) => `<tr><td><div class="cockpit-org-name"><span class="cockpit-org-rank">${String(index + 1).padStart(2, '0')}</span><strong>${safe(name)}</strong></div></td><td><strong>${participating}</strong></td><td>${enabled}</td><td><div class="cockpit-org-coverage"><div><i style="width:${rate}%"></i></div><strong>${rate}%</strong></div></td></tr>`).join('') || '<tr><td colspan="4" class="empty">暂无组织数据</td></tr>'}</tbody></table><p class="cockpit-org-footnote">参与率 = 本期参与人数 ÷ 组织职工人数。参与包括发帖、评论、点赞、收藏和分享。</p></div></section>` +
+      `<section class="cockpit-section">${section('02', '诉求关注', '职工最近最关心什么？')}<div class="cockpit-grid cockpit-grid-focus cockpit-grid-focus-hot"><div class="card card-pad">${cardTitle('热点诉求排行', '按浏览、点赞、评论综合关注度', '结果', `<span class="cockpit-card-actions"><span class="badge">Top 5</span><button class="text-link" data-action="cockpit-hot-more">查看更多帖子 ${icon('arrow-up-right')}</button></span>`)}<div class="cockpit-hot-list">${hotRows.map((item, index) => `<button class="cockpit-hot-row" data-action="cockpit-post-detail" data-id="${safe(item.post.id)}"><b>${index + 1}</b><span><strong>${safe(item.post.title)}</strong><small>${safe(item.post.board)} · 浏览 ${item.engagement.views || 0} · 点赞 ${item.engagement.likes || 0} · 评论 ${item.comments}</small></span><em>${item.score}</em>${icon('chevron-right')}</button>`).join('') || '<p class="muted">暂无热点诉求</p>'}</div></div></div></section>` +
+      `<section class="cockpit-section">${section('03', '诉求办理', '职工提出的问题处理到什么程度？', '执行层 · 看进度')}<div class="cockpit-grid cockpit-grid-process"><div class="card card-pad">${cardTitle('事项办理状态', '四种状态互斥统计，避免重复堆叠指标卡', '结果', `<span class="badge">共 ${total} 项</span>`)}<div class="cockpit-status-list">${statusRows.map(([label, value, tone]) => `<div><span>${label}</span><p><i class="${tone}" style="width:${Math.max(value ? 8 : 0, total ? value / total * 100 : 0)}%"></i></p><strong>${value}</strong></div>`).join('')}</div><div class="cockpit-callout is-warning">${icon('clock-3')}<span>当前有 ${data.affairs.filter((item) => deadlineFlag(item) === '逾期').length} 项超过承诺响应时限。</span><button class="text-link" data-action="nav" data-id="leader-statistics">查看超时</button></div></div><div class="card card-pad">${cardTitle('办理效率', '以已回复事项为计算样本', '动作', '<span class="badge green">较上月改善</span>')}<div class="cockpit-efficiency"><div><span>回复率</span><strong>${replyRate}</strong><em>已回复 ${model.replied.length} 项</em></div><div><span>平均响应时长</span><strong>${avgResponse}</strong><em>${responseTimes.length ? `基于 ${responseTimes.length} 项` : '暂无数据'}</em></div><div><span>退回修改</span><strong>${data.affairs.filter((item) => item.status === '退回修改').length}</strong><em>需要重新处理</em></div><div><span>无需处理</span><strong>${model.noAction.length}</strong><em>完成研究判断</em></div></div></div></div><div class="cockpit-grid cockpit-grid-process cockpit-process-secondary">${topicCard}${categoryCard}</div></section>` +
+      `<section class="cockpit-section">${section('04', '公开反馈', '平台有没有把处理结果反馈给职工？', '结果层 · 看触达')}<div class="cockpit-grid cockpit-grid-feedback"><div class="card card-pad">${cardTitle('反馈触达链路', '从正式答复到职工看到结果的完整闭环', '结果', feedbackFlowHelp)}<div class="cockpit-feedback-flow">${[['已回复事项', feedbackResultCount, '完成正式答复'], ['可公开', canPublic, '符合公开条件'], ['已公开', publishedCount, '回音壁发布'], ['被触达', feedbackTouchCount, '浏览与互动次数']].map(([label, value, note], index) => `<div><span>${label}</span><strong>${value}</strong><small>${note}</small>${index === 2 ? `<em>${canPublic ? Math.round(publishedCount / canPublic * 100) : 0}%</em>` : index === 3 ? `<em>${feedbackTouchCount ? '已有触达' : '暂无触达'}</em>` : ''}</div>${index < 3 ? '<i></i>' : ''}`).join('')}</div><div class="cockpit-feedback-rule">${icon('route')}<span><strong>进入反馈路径：</strong>事项处理中 → 完成正式答复并变为“已回复” → 选择公开答复 → 发布到回音壁 → 职工端浏览或互动后产生触达。</span></div></div><div class="card card-pad">${cardTitle('最近公开反馈', '管理结果是否被职工看见', '动作', `<span class="cockpit-card-actions"><span class="badge green">本期发布 ${periodPublishedCount}</span>${publicListHelp}</span>`)}<div class="cockpit-public-list">${model.published.slice(0, 4).map((item) => `<button data-action="echo-view" data-id="${safe(item.id)}">${icon('megaphone')}<span><strong>${safe(item.title)}</strong><small>${safe(item.scope || '授权范围')} · ${safe(item.publishedAt || '已发布')}</small></span>${icon('chevron-right')}</button>`).join('') || '<p class="muted">暂无已发布反馈</p>'}</div><p class="cockpit-public-footnote">仅展示当前统计周期内已发布的回音壁记录，列表默认展示前 4 条。</p></div></div></section>` +
+      `<section class="cockpit-section">${section('05', '运营趋势', '平台运行情况是在改善还是恶化？', '趋势层 · 看变化')}<div class="card card-pad cockpit-trend-card">${cardTitle('核心运营指标趋势', '按顶部统计周期观察参与、诉求量和回复率变化', '趋势', `<span class="leader-period-follow">${icon('link-2')}跟随统计周期</span>`)}<div class="cockpit-trend-chart"><div class="cockpit-trend-grid"></div><div class="cockpit-trend-lines"><i></i><i></i><i></i></div></div><div class="cockpit-trend-axis">${trend.map(([date]) => `<span>${safe(trendLabel(date))}</span>`).join('') || '<span>暂无趋势数据</span>'}</div><div class="cockpit-trend-legend"><span><i class="is-red"></i>活跃职工人数</span><span><i class="is-gold"></i>诉求量</span><span><i class="is-green"></i>回复率</span></div><div class="cockpit-trend-summary"><div><span>活跃职工人数</span><strong>${participants}</strong><em>${safe(periodText)} · 参与</em></div><div><span>诉求量</span><strong>${total}</strong><em>${safe(periodText)} · 登记</em></div><div><span>回复率</span><strong>${replyRate}</strong><em>${safe(periodText)} · 办理</em></div></div></div></section>`;
   }
   function leaderStatistics() {
     const data = db(), model = leaderModel(data), daily = new Map();
@@ -1100,9 +1303,9 @@
     const replied = model.replied.length, total = data.affairs.length;
     const typeRows = [...new Set(data.posts.map((item) => item.board))].map((board) => { const postIds = new Set(data.posts.filter((item) => item.board === board).map((item) => item.id)); const affairIds = new Set(data.affairs.filter((item) => postIds.has(item.postId)).map((item) => item.id)); return { board, posts: postIds.size, affairs: affairIds.size, published: model.published.filter((item) => affairIds.has(item.affairId)).length }; });
     const categoryRows = [...new Set(data.affairs.map((item) => item.category || '待分类'))].map((category) => { const rows = data.affairs.filter((item) => (item.category || '待分类') === category); const done = rows.filter((item) => item.status === '已回复').length; return { category, total: rows.length, done, rate: rows.length ? Math.round(done / rows.length * 100) : 0 }; }).sort((a, b) => b.total - a.total);
-    return heading('事项运行统计', '按状态、来源和管理端人工分类查看事项处置情况。', `<div class="leader-report-actions"><button class="btn btn-secondary" onclick="showToast('统计报告已生成')">${icon('file-chart-column')}生成报告</button><button class="btn btn-primary" onclick="showToast('统计结果已加入下载任务')">${icon('download')}导出数据</button></div>`) +
-      `<form class="leader-analysis-filters" onsubmit="event.preventDefault();showToast('统计口径已更新')"><label><span>统计周期</span><select class="select"><option>本月</option><option>本季度</option><option>今年以来</option></select></label><label><span>组织范围</span><select class="select"><option>省社本级及授权组织</option><option>省社本级</option><option>直属单位</option></select></label><label><span>业务类型</span><select class="select"><option>全部类型</option><option>建言献策</option><option>心声诉求</option><option>业务交流</option></select></label><button class="btn btn-primary" type="submit">${icon('search')}查询</button></form>` +
-      `<div class="leader-analysis-metrics">${[['message-square-text','内容发布',data.posts.length,'作为事项来源'],['clipboard-check','登记事项',total,`待处理 ${model.pending.length} 项`],['message-square-reply','已回复',replied,`回复率 ${total ? Math.round(replied / total * 100) : 0}%`],['archive','已归档',model.archived.length,'保留历史处置记录'],['tags','重点 / 人工专题',`${model.key.length} / ${model.topics.length}`,'管理端人工标记']].map(([symbol,label,value,note])=>`<div>${icon(symbol)}<span>${label}<small>${note}</small></span><strong>${value}</strong></div>`).join('')}</div>` +
+    return heading('事项运行统计', '按状态、来源和管理端人工分类查看事项处置情况。', `<div class="leader-report-actions"><button class="btn btn-primary" onclick="showToast('统计结果已加入下载任务')">${icon('download')}导出数据</button></div>`) +
+      `<form class="leader-analysis-filters" onsubmit="event.preventDefault();showToast('统计周期已更新')"><label><span>统计周期</span><select class="select"><option>本周</option><option selected>本月</option><option>本季度</option></select></label><label><span>业务类型</span><select class="select"><option>全部类型</option><option>建言献策</option><option>心声诉求</option><option>业务交流</option></select></label><button class="btn btn-primary" type="submit">${icon('search')}应用周期</button></form>` +
+      `<div class="leader-analysis-metrics">${[['message-square-text','内容发布',data.posts.length,'作为事项来源'],['clipboard-check','登记事项',total,`待处理 ${model.pending.length} 项`],['message-square-reply','已回复',replied,`回复率 ${total ? Math.round(replied / total * 100) : 0}%`],['archive','无需处理',model.noAction.length,'无需继续办理或已完成研究判断']].map(([symbol,label,value,note])=>`<div>${icon(symbol)}<span>${label}<small>${note}</small></span><strong>${value}</strong></div>`).join('')}</div>` +
       `<div class="leader-analysis-layout"><section class="card card-pad leader-trend-card"><div class="card-title"><span>参与热度趋势<small>浏览、点赞、评论综合指数</small></span><span class="badge">近 7 日</span></div><div class="leader-trend">${trend.map(([date, value]) => `<div class="leader-trend-column"><strong>${value}</strong><i style="height:${Math.max(12, value / maxTrend * 100)}%"></i><span>${safe(date.slice(5))}</span></div>`).join('') || '<p class="muted">暂无趋势数据</p>'}</div></section><section class="card card-pad"><div class="card-title">业务类型转化</div><div class="leader-type-conversion">${typeRows.map((item) => `<div><header><strong>${safe(item.board)}</strong><span>${item.posts} 条内容</span></header><p><i style="width:${Math.min(100,item.affairs/Math.max(1,item.posts)*100)}%"></i></p><small>登记事项 ${item.affairs} · 公开成果 ${item.published}</small></div>`).join('')}</div></section></div>` +
       `<div class="leader-analysis-lower"><section class="card card-pad"><div class="card-title">事项状态分布</div>${distributionRows(data.affairs, (item) => item.status)}</section><section class="card card-pad"><div class="card-title">事项分类回复率 <small>按事项数排序</small></div><div class="leader-org-ranking">${categoryRows.slice(0,6).map((item,index)=>`<div><b>${index+1}</b><span><strong>${safe(item.category)}</strong><small>${item.done}/${item.total} 已回复</small></span><em>${item.rate}%</em></div>`).join('') || '<p class="muted">暂无分类数据</p>'}</div></section></div>`;
   }
@@ -1160,7 +1363,9 @@
     const post = data.posts.find((p) => String(p.id) === id);
     const affair = data.affairs.find((a) => a.id === id);
     const topic = affairTopics(data).find((item) => String(item.id) === id);
+    if (type === 'cockpit-post-detail' && post) return cockpitPostDetail(data, post);
     if (type === 'post-detail' && post) return postDetail(data, post);
+    if (type === 'cockpit-hot-list') return cockpitHotList(data);
     if (type === 'content-review-detail' && post) return contentReviewDetail(data, post);
     if (type === 'content-review-batch-return') {
       const selected = data.posts.filter((item) => contentReviewSelection.has(String(item.id)) && auditStatus(item) === '待审核');
@@ -1374,7 +1579,16 @@
       if (affair.status !== '已回复' || !affair.draft) return modal('无法发布到回音壁', '<p>只有已回复且已填写回复内容的事项可以发布到回音壁。</p>', button('关闭', 'close', ''));
       return modal('发布到回音壁', `<div class="notice">${icon('messages-square')}<div><strong>${safe(source?.title || affair.title)}</strong><p>${safe(affair.id)} · 已向用户回复 · 当前未发布到回音壁</p></div></div>${input('公开标题', 'echo-title', `关于“${affair.title}”的答复`)}${choose('公开范围', 'echo-scope', ['全体职工', '省社本级', '直属企业'], '全体职工')}${textarea('公开内容', 'echo-body', affair.draft)}`, button('取消', 'close', '') + button('确认发布', 'echo-save', id, 'primary'));
     }
-    if (type === 'echo-view') { const item = managedEchoRecords(data).find((entry) => String(entry.id) === String(id)); return item ? modal('回音壁内容', `<h3>${safe(item.title)}</h3><p>${safe(item.body)}</p><dl class="post-detail-meta"><dt>来源帖子</dt><dd>${safe(item.sourceTitle)}</dd><dt>内容分类</dt><dd>${safe(item.sourceCategory)}</dd><dt>关联事项</dt><dd>${safe(item.affairId)}</dd><dt>公开范围</dt><dd>${safe(item.scope)}</dd><dt>发布时间</dt><dd>${safe(item.publishedAt)}</dd><dt>发布状态</dt><dd>${badgeFor(item.status)}</dd></dl><div class="engagement-section"><h4>互动数据</h4>${interactionCell(interactionSummary(item, postComments(data, 6000 + Number(item.sourcePostId || 0))))}</div>`, button('关闭', 'close', '')) : ''; }
+    if (type === 'echo-view') {
+      const item = managedEchoRecords(data).find((entry) => String(entry.id) === String(id)) || (() => {
+        const stored = (data.echoPublications || []).find((entry) => String(entry.id) === String(id));
+        if (!stored) return null;
+        const affair = data.affairs.find((entry) => String(entry.id) === String(stored.affairId));
+        const source = data.posts.find((entry) => String(entry.id) === String(stored.sourcePostId || affair?.postId));
+        return { ...stored, sourceTitle: source?.title || affair?.title || stored.sourceTitle || '来源事项未记录', sourceCategory: source?.board || affair?.sourceType || stored.sourceCategory || '未记录', affair, source };
+      })();
+      return item ? modal('回音壁内容', `<h3>${safe(item.title)}</h3><p>${safe(item.body)}</p><dl class="post-detail-meta"><dt>来源帖子</dt><dd>${safe(item.sourceTitle)}</dd><dt>内容分类</dt><dd>${safe(item.sourceCategory)}</dd><dt>关联事项</dt><dd>${safe(item.affairId)}</dd><dt>公开范围</dt><dd>${safe(item.scope)}</dd><dt>发布时间</dt><dd>${safe(item.publishedAt)}</dd><dt>发布状态</dt><dd>${badgeFor(item.status)}</dd></dl><div class="engagement-section"><h4>互动数据</h4>${interactionCell(interactionSummary(item, postComments(data, 6000 + Number(item.sourcePostId || 0))))}</div>`, button('关闭', 'close', '')) : '';
+    }
     if (type === 'board-new' || type === 'board-edit') { const board = data.boards.find((item) => item.id === id); const body = `<div class="board-editor-grid">${input('栏目名称', 'name', board?.name || '')}${textarea('栏目说明', 'board-description', board?.description || '')}${choose('允许评论', 'board-comments', ['是', '否'], board?.allowComments === false ? '否' : '是')}${choose('生成办理事项', 'board-affair', ['是', '否'], board?.generatesAffair ? '是' : '否')}${input('排序', 'board-sort', board?.sort || data.boards.length + 1, 'number')}</div>`; return modal(board ? '编辑栏目' : '新增栏目', body, button('取消', 'close', '') + button('保存栏目', 'board-save', id, 'primary')).replace('<section class="modal"', '<section class="modal board-editor-modal"'); }
     if (type === 'word-new' || type === 'word-edit') { const rule = data.sensitiveWords.find((item) => item.id === id); const level = rule?.riskLevel || '中'; return modal(rule ? '编辑敏感词' : '新增敏感词', input('敏感词', 'term', rule?.term || '') + choose('词语分类', 'category', sensitiveCategories, rule?.category || '其他') + choose('风险等级', 'riskLevel', ['高', '中', '低'], level) + `<div class="risk-policy-preview"><strong>处置方式随风险等级自动确定</strong><p>高风险禁止提交；中风险进入优先审核；低风险进入普通审核。</p></div>` + choose('命中规则', 'matchRule', ['包含匹配', '完整词匹配'], rule?.matchRule || '包含匹配') + choose('适用范围', 'scope', ['全部', '发帖', '评论'], rule?.scope || '全部'), button('保存规则', 'word-save', id, 'primary')); }
     if (type === 'word-import') return modal('批量导入敏感词', `<div class="word-import-guide"><div class="word-import-guide-head"><div><strong>文件格式</strong><p>支持 CSV、TXT 文件。首行字段必须依次为：敏感词、分类、风险等级、命中规则、适用范围。</p></div>${button(`${icon('download')} 下载导入模板`, 'word-template-download', '')}</div><code>财政专户密码,信息安全,高,包含匹配,全部</code></div><label class="field"><span>选择导入文件</span><input class="input" id="wf-word-import-file" type="file" accept=".csv,.txt,text/csv,text/plain"></label><p class="muted">有效值：风险等级为高/中/低；命中规则为包含匹配/完整词匹配；适用范围为全部/发帖/评论。重复敏感词将自动跳过。</p>`, button('取消', 'close', '') + button('开始导入', 'word-import-save', '', 'primary'));
@@ -1438,6 +1652,18 @@
       PrototypeData.save(data); closeModal(); return showToast('轮播图已更新');
     }
     if (action === 'close') { state.traceResult = null; return closeModal(); }
+    if (action === 'leader-period-set') {
+      const nextPeriod = ['本周', '本月', '本季度', '自定义'].includes(id) ? id : '本月';
+      if (nextPeriod === '自定义' && (!leaderCustomFrom || !leaderCustomTo)) {
+        const [from, to] = leaderPeriodBounds(db());
+        leaderCustomFrom = from;
+        leaderCustomTo = to;
+      }
+      leaderPeriod = nextPeriod;
+      render();
+      return showToast(`已切换统计周期：${leaderPeriod}`);
+    }
+    if (action === 'leader-period-apply') { leaderCustomFrom = document.getElementById('wf-leader-period-from')?.value || ''; leaderCustomTo = document.getElementById('wf-leader-period-to')?.value || ''; if (!leaderCustomFrom || !leaderCustomTo) return showToast('请选择完整的起止日期'); if (leaderCustomFrom > leaderCustomTo) return showToast('开始日期不能晚于结束日期'); leaderPeriod = '自定义'; return render(); }
     if (action === 'trace-new') { state.modal = { type: action, id }; return render(); }
     if (action === 'trace-query-detail' || action === 'trace-review-detail') { state.modal = { type: 'trace-detail', id }; return render(); }
     if (action === 'trace-submit') {
@@ -1479,6 +1705,29 @@
     if (action === 'report-decision-cancel') { state.reportDecision = null; state.modal = { type: 'report-detail', id }; return render(); }
     if (action === 'report-confirm' || action === 'report-dismiss') { if (!canReview()) return showToast('当前角色无权核查举报'); state.reportDecision = action; state.modal = { type: 'report-decision', id }; return render(); }
     if (action === 'comment-review-cancel') { state.modal = { type: 'comment-batch-detail', id: state.commentReviewPending?.postId }; state.commentReviewPending = null; render(); for (const box of document.querySelectorAll('.comment-review-check')) box.checked = state.commentReviewSelection?.includes(box.value) || false; return; }
+    if (action === 'cockpit-hot-more') { state.modal = { type: 'cockpit-hot-list', id: '' }; return render(); }
+    if (action === 'cockpit-hot-list') { state.modal = { type: 'cockpit-hot-list', id: '' }; return render(); }
+    if (action === 'cockpit-post-detail') { state.postDetailTab = 'content'; state.modal = { type: 'cockpit-post-detail', id }; return render(); }
+    if (action === 'cockpit-topic-workbench') { assignmentTab = '处理中'; affairSelection.clear(); affairTopicQuery = ''; return go('handler-dispatch'); }
+    if (action === 'cockpit-hot-prev' || action === 'cockpit-hot-next') {
+      const index = cockpitHotIds.indexOf(String(id));
+      const nextIndex = index + (action === 'cockpit-hot-prev' ? -1 : 1);
+      const nextId = cockpitHotIds[nextIndex];
+      if (!nextId) return showToast(action === 'cockpit-hot-prev' ? '已经是第一篇热点诉求' : '已经是最后一篇热点诉求');
+      state.postDetailTab = 'content';
+      state.modal = { type: 'cockpit-post-detail', id: nextId };
+      return render();
+    }
+    if (action === 'cockpit-jump') {
+      const sectionIndex = { participation: 0, focus: 1, process: 2, feedback: 3 }[id];
+      const target = Number.isInteger(sectionIndex) ? document.querySelectorAll('.cockpit-section')[sectionIndex] : null;
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        target.classList.add('is-focus');
+        window.setTimeout(() => target.classList.remove('is-focus'), 1400);
+      }
+      return;
+    }
     if (action === 'nav') return go(id);
     if (action.startsWith('post-decision-')) { state.modal = { type: 'post-decision', id: `${action.slice('post-decision-'.length)}:${id}` }; return render(); }
     if (action === 'handler-reset') { handlerFilters = { query: '', status: '', priority: '', deadline: '', type: '', assignedFrom: '', assignedTo: '', deadlineFrom: '', deadlineTo: '' }; return render(); }
@@ -2112,7 +2361,7 @@
     const trigger = event.target.closest('[data-action]');
     if (!trigger) return;
     if (trigger.classList.contains('modal-backdrop') && event.target !== trigger) return;
-    if (!canEdit() && !['close', 'nav', 'staff', 'post-detail', 'post-detail-tab', 'affair-detail'].includes(trigger.dataset.action)) return showToast('领导视图仅支持查看');
+    if (!canEdit() && !['close', 'nav', 'staff', 'post-detail', 'post-detail-tab', 'cockpit-post-detail', 'affair-detail', 'affair-topic-view', 'cockpit-topic-workbench', 'echo-view', 'cockpit-jump', 'cockpit-hot-more', 'cockpit-hot-list', 'cockpit-hot-prev', 'cockpit-hot-next', 'leader-period-set', 'leader-period-apply'].includes(trigger.dataset.action)) return showToast('领导视图仅支持查看');
     act(trigger.dataset.action, trigger.dataset.id || '');
   });
   window.ManagementWorkflow = {
@@ -2140,7 +2389,7 @@
     commentReviewSearch() { commentReviewFilters = { query: readField('comment-review-query'), board: readField('comment-review-board'), risk: readField('comment-review-risk'), dateFrom: readField('comment-review-from'), dateTo: readField('comment-review-to') }; render(); },
     reportReviewSearch() { reportReviewFilters = { query: readField('report-review-query'), category: readField('report-review-category'), dateFrom: readField('report-review-from'), dateTo: readField('report-review-to') }; render(); },
     page(name) {
-      const routes = { dashboard: board, 'flow-config': () => window.ManagementFlowConfig?.page() || '', 'base-config': () => window.ManagementBaseConfig?.page() || '', 'content-ledger': contentLedger, 'content-review': contentReview, 'extension-review': extensionReview, review: posts, comments, 'report-review': reportReview, sensitive, assignments: assignment, handling, tasks: handlerTasks, drafts: handlerDrafts, notices: handlerReminders, rectifications, echo: state.role === 'dispatch' ? handling : echo, categories, announcements, banners, policy: policyAndQuestions, 'user-review': userReviews, users, organization, permissions: roles, statistics, logs, audit: logs, 'handler-dashboard': handlerBoard, 'handler-dispatch': handlerDispatch, 'handler-tasks': handlerTasks, 'handler-handling': handlerHandling, 'handler-messages': handlerMessages, 'handler-drafts': handlerDrafts, 'handler-reminders': handlerReminders, 'handler-answers': handlerAnswers, 'handler-statistics': handlerStatistics, 'leader-dashboard': leaderDashboard, 'leader-statistics': leaderStatistics, 'leader-key-affairs': leaderKeyAffairs, 'leader-results': leaderResults };
+      const routes = { dashboard: board, 'flow-config': () => window.ManagementFlowConfig?.page() || '', 'base-config': () => window.ManagementBaseConfig?.page() || '', 'content-ledger': contentLedger, 'content-review': contentReview, 'extension-review': extensionReview, review: posts, comments, 'report-review': reportReview, sensitive, assignments: assignment, handling, tasks: handlerTasks, drafts: handlerDrafts, notices: handlerReminders, rectifications, echo: state.role === 'dispatch' ? handling : echo, categories, announcements, banners, policy: policyAndQuestions, 'user-review': userReviews, users, organization, permissions: roles, statistics, logs, audit: logs, 'handler-dashboard': handlerBoard, 'handler-dispatch': handlerDispatch, 'handler-tasks': handlerTasks, 'handler-handling': handlerHandling, 'handler-messages': handlerMessages, 'handler-drafts': handlerDrafts, 'handler-reminders': handlerReminders, 'handler-answers': handlerAnswers, 'handler-statistics': handlerStatistics, 'leader-dashboard': leaderDashboard, 'leader-statistics': leaderStatistics, 'leader-results': leaderResults };
       routes['trace-query'] = () => traceQueryPage(false); routes['trace-review'] = () => traceQueryPage(true);
       return (routes[name] || board)();
     },

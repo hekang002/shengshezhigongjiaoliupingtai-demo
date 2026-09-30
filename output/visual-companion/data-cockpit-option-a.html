@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>数据驾驶舱视觉稿 | 湖北供销·心声</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700;800&display=swap">
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <style>
+    :root {
+      --ink: #2a2927;
+      --muted: #77746e;
+      --line: #dedcd6;
+      --canvas: #f6f5f2;
+      --panel: #ffffff;
+      --brand: #b72b31;
+      --brand-soft: #fff4f3;
+      --blue: #b72b31;
+      --cyan: #ba765d;
+      --green: #4f816b;
+      --gold: #c28a3c;
+      --purple: #8c6d63;
+      --shadow: 0 6px 20px rgba(66, 61, 52, .055);
+      font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: var(--ink); background: var(--canvas); }
+    button, select { font: inherit; }
+    button { cursor: pointer; }
+    .app { min-height: 100vh; }
+    .topbar { height: 66px; display: flex; align-items: center; gap: 22px; padding: 0 32px; color: #fff; background: #242b35; }
+    .brand { display: flex; align-items: center; gap: 11px; min-width: 250px; }
+    .brand-mark { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; color: #fff; background: var(--brand); font-size: 13px; font-weight: 800; line-height: 1.1; text-align: center; }
+    .brand strong { display: block; font-size: 15px; letter-spacing: .5px; }
+    .brand small { display: block; margin-top: 2px; color: #aeb9c7; font-size: 10px; }
+    .topbar-spacer { flex: 1; }
+    .topbar-meta { display: flex; align-items: center; gap: 16px; color: #c8d1dd; font-size: 12px; }
+    .topbar-meta .badge { padding: 5px 9px; border: 1px solid #536174; border-radius: 999px; color: #dbe4ef; }
+    .page { max-width: 1480px; margin: 0 auto; padding: 30px 34px 60px; }
+    .page-head { display: flex; align-items: end; justify-content: space-between; gap: 20px; margin-bottom: 18px; }
+    .eyebrow { display: flex; align-items: center; gap: 7px; color: var(--brand); font-size: 12px; font-weight: 700; }
+    .eyebrow::before { display: block; width: 18px; height: 2px; background: var(--brand); content: ""; }
+    h1 { margin: 8px 0 5px; font-size: 31px; letter-spacing: -.6px; }
+    .intro { margin: 0; color: var(--muted); font-size: 13px; }
+    .head-actions { display: flex; align-items: center; gap: 9px; }
+    .btn { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border: 1px solid var(--line); border-radius: 5px; color: var(--ink); background: #fff; font-size: 12px; }
+    .btn.primary { border-color: var(--brand); color: #fff; background: var(--brand); }
+    .btn .icon { width: 14px; height: 14px; }
+    .scopebar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 19px; padding: 10px 12px; border: 1px solid var(--line); background: var(--panel); box-shadow: var(--shadow); }
+    .scope-left, .scope-right { display: flex; align-items: center; gap: 10px; }
+    .scope-label { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+    .scope-label .icon { width: 15px; color: var(--brand); }
+    .segmented { display: inline-flex; overflow: hidden; border: 1px solid var(--line); border-radius: 5px; }
+    .segmented button { height: 29px; padding: 0 13px; border: 0; border-right: 1px solid var(--line); color: var(--muted); background: #fbfaf8; font-size: 12px; }
+    .segmented button:last-child { border-right: 0; }
+    .segmented button.active { color: #fff; background: var(--brand); }
+    .select { height: 31px; padding: 0 28px 0 10px; border: 1px solid var(--line); border-radius: 4px; color: var(--ink); background: #fff; font-size: 12px; }
+    .section-label { display: flex; align-items: center; justify-content: space-between; margin: 27px 0 10px; }
+    .section-title-wrap { display: flex; align-items: center; gap: 10px; }
+    .section-index { display: grid; place-items: center; width: 27px; height: 27px; border: 1px solid #e4c8c4; border-radius: 5px; color: var(--brand); background: var(--brand-soft); font-size: 10px; font-weight: 800; }
+    .section-label h2 { margin: 0; font-size: 16px; }
+    .section-label p { margin: 4px 0 0; color: var(--muted); font-size: 11px; }
+    .section-intent { padding: 5px 9px; border: 1px solid #e4dfd8; border-radius: 999px; color: var(--muted); background: #fbfaf8; font-size: 10px; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+    .kpi { position: relative; min-height: 138px; padding: 16px 17px 14px; overflow: hidden; border: 1px solid #e6d8d4; border-top: 3px solid var(--brand); background: #fffafa; box-shadow: var(--shadow); }
+    .kpi:nth-child(2) { border-color: #eadcc2; border-top-color: var(--gold); background: #fffbf3; }
+    .kpi:nth-child(3) { border-color: #d7e3dc; border-top-color: var(--green); background: #f8fbf9; }
+    .kpi:nth-child(4) { border-color: #e4dad6; border-top-color: var(--purple); background: #fbf8f6; }
+    .kpi:nth-child(5) { border-color: #ead9d3; border-top-color: var(--cyan); background: #fff9f6; }
+    .kpi::after { position: absolute; right: -24px; top: -35px; width: 110px; height: 110px; border: 1px solid rgba(183,43,49,.12); border-radius: 50%; content: ""; }
+    .kpi-head { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; }
+    .kpi-head .icon { width: 16px; height: 16px; color: var(--blue); }
+    .kpi:nth-child(2) .icon { color: var(--gold); }
+    .kpi:nth-child(3) .icon { color: var(--green); }
+    .kpi:nth-child(4) .icon { color: var(--purple); }
+    .kpi:nth-child(5) .icon { color: var(--cyan); }
+    .kpi-value { display: block; margin-top: 15px; font-size: 29px; font-weight: 800; letter-spacing: -.8px; }
+    .kpi-note { display: flex; align-items: center; gap: 5px; margin-top: 8px; color: var(--muted); font-size: 10px; }
+    .up { color: var(--green); font-weight: 700; }
+    .down { color: var(--brand); font-weight: 700; }
+    .panel { min-width: 0; border: 1px solid #dfddd8; background: #fff; box-shadow: var(--shadow); }
+    .panel-pad { padding: 16px 18px; }
+    .panel-head { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
+    .panel-heading { display: flex; align-items: center; gap: 8px; }
+    .panel-title { margin: 0; font-size: 14px; }
+    .panel-subtitle { margin: 4px 0 0; color: var(--muted); font-size: 10px; }
+    .tiny-badge { padding: 4px 8px; border-radius: 999px; color: var(--muted); background: #f0efeb; font-size: 10px; white-space: nowrap; }
+    .tiny-badge.green { color: #1f7555; background: #e9f6f0; }
+    .purpose-tag { padding: 3px 6px; border-radius: 3px; color: var(--brand); background: var(--brand-soft); font-size: 9px; font-weight: 700; }
+    .purpose-tag.structure { color: #886322; background: #fff8e8; }
+    .purpose-tag.action { color: #2f7056; background: #eef8f2; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1.35fr; gap: 14px; }
+    .participation-stats { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 18px; border: 1px solid var(--line); }
+    .participation-stats div { padding: 14px 12px; border-right: 1px solid var(--line); }
+    .participation-stats div:last-child { border-right: 0; }
+    .participation-stats strong { display: block; font-size: 24px; }
+    .participation-stats span { display: block; margin-top: 5px; color: var(--muted); font-size: 10px; }
+    .formula { margin: 16px 0 0; color: var(--muted); font-size: 10px; line-height: 1.55; }
+    .bar-chart { display: flex; align-items: end; gap: 13px; height: 148px; margin-top: 16px; padding: 0 8px 21px; border-bottom: 1px solid var(--line); }
+    .bar-item { display: grid; flex: 1; height: 100%; align-items: end; gap: 7px; text-align: center; }
+    .bar { width: 100%; min-height: 8px; border-radius: 3px 3px 0 0; background: var(--blue); }
+    .bar-item:nth-child(2n) .bar { background: var(--gold); }
+    .bar-item small { color: var(--muted); font-size: 9px; }
+    .chart-legend { display: flex; gap: 15px; margin-top: 11px; color: var(--muted); font-size: 10px; }
+    .legend-dot { display: inline-block; width: 7px; height: 7px; margin-right: 4px; border-radius: 50%; background: var(--blue); }
+    .legend-dot.cyan { background: var(--gold); }
+    .grid-3 { display: grid; grid-template-columns: 1.12fr .92fr .92fr; gap: 14px; }
+    .rank-list { display: grid; gap: 8px; margin-top: 13px; }
+    .rank-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 9px; padding: 8px 0; border-bottom: 1px solid #ecebe7; }
+    .rank-row:last-child { border-bottom: 0; }
+    .rank { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 5px; color: var(--brand); background: var(--brand-soft); font-size: 11px; font-weight: 700; }
+    .rank:first-child .rank { color: #fff; background: var(--brand); }
+    .rank-row strong { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+    .rank-row small { display: block; margin-top: 3px; color: var(--muted); font-size: 9px; }
+    .score { color: var(--brand); font-size: 12px; font-weight: 700; }
+    .keyword-cloud { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+    .keyword { padding: 7px 10px; border: 1px solid #e3d9d3; border-radius: 4px; color: #765e55; background: #faf6f3; font-size: 11px; }
+    .keyword.hot { border-color: #f0cbc8; color: var(--brand); background: #fff4f3; }
+    .distribution { display: grid; gap: 13px; margin-top: 16px; }
+    .dist-row header { display: flex; justify-content: space-between; color: var(--muted); font-size: 10px; }
+    .dist-row header strong { color: var(--ink); font-size: 11px; }
+    .track { height: 8px; margin-top: 6px; overflow: hidden; background: #ecebe7; }
+    .track i { display: block; height: 100%; background: var(--blue); }
+    .track .gold { background: var(--gold); }
+    .track .green { background: var(--green); }
+    .track .purple { background: var(--purple); }
+    .grid-process { display: grid; grid-template-columns: 1.25fr .9fr; gap: 14px; }
+    .status-flow { display: grid; gap: 11px; margin-top: 16px; }
+    .status-row { display: grid; grid-template-columns: 68px minmax(0, 1fr) 40px; align-items: center; gap: 10px; color: var(--muted); font-size: 11px; }
+    .status-row strong { color: var(--ink); text-align: right; font-size: 12px; }
+    .status-row .track { margin-top: 0; height: 10px; }
+    .notice { display: grid; grid-template-columns: 18px 1fr auto; align-items: center; gap: 10px; margin-top: 17px; padding: 10px 11px; border-left: 3px solid var(--gold); color: #76551c; background: #fff8e9; font-size: 10px; }
+    .notice .icon { width: 15px; }
+    .response-metrics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 15px; }
+    .response-metric { padding: 12px; border: 1px solid #e4dfd8; background: #fbfaf8; }
+    .response-metric:nth-child(1) { border-top: 2px solid var(--green); background: #f8fbf9; }
+    .response-metric:nth-child(2) { border-top: 2px solid var(--purple); background: #fbf8f6; }
+    .response-metric:nth-child(3) { border-top: 2px solid var(--brand); background: #fffafa; }
+    .response-metric:nth-child(4) { border-top: 2px solid var(--gold); background: #fffbf3; }
+    .response-metric span { display: block; color: var(--muted); font-size: 10px; }
+    .response-metric strong { display: block; margin-top: 6px; font-size: 22px; }
+    .feedback-grid { display: grid; grid-template-columns: 1.05fr .95fr; gap: 14px; }
+    .feedback-hero { display: grid; grid-template-columns: .85fr 1.15fr; min-height: 170px; padding: 20px; border: 1px solid #ead1cf; background: #fff8f7; }
+    .feedback-main { display: flex; flex-direction: column; justify-content: center; border-right: 1px solid #ead1cf; }
+    .feedback-main span { color: var(--brand); font-size: 11px; font-weight: 700; }
+    .feedback-main strong { margin-top: 8px; font-size: 38px; line-height: 1; }
+    .feedback-main small { margin-top: 8px; color: var(--muted); font-size: 10px; }
+    .feedback-breakdown { display: grid; grid-template-columns: repeat(2, 1fr); }
+    .feedback-breakdown div { display: grid; place-content: center; text-align: center; border-right: 1px solid #ead1cf; border-bottom: 1px solid #ead1cf; }
+    .feedback-breakdown div:nth-child(2n) { border-right: 0; }
+    .feedback-breakdown div:nth-last-child(-n+2) { border-bottom: 0; }
+    .feedback-breakdown span { color: var(--muted); font-size: 10px; }
+    .feedback-breakdown strong { margin-top: 6px; font-size: 21px; }
+    .feedback-flow { display: grid; grid-template-columns: 1fr 22px 1fr 22px 1fr 22px 1fr; align-items: center; min-height: 170px; padding: 20px 16px; border: 1px solid #ead1cf; background: #fffaf8; }
+    .feedback-flow-node { min-width: 0; text-align: center; }
+    .feedback-flow-node span, .feedback-flow-node small { display: block; color: var(--muted); font-size: 10px; }
+    .feedback-flow-node strong { display: block; margin: 9px 0 5px; color: var(--ink); font-size: 28px; }
+    .feedback-flow-node em { color: var(--brand); font-size: 9px; font-style: normal; }
+    .feedback-flow-arrow { height: 1px; background: #d9b7b2; }
+    .feedback-list { display: grid; gap: 0; margin-top: 10px; }
+    .feedback-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 9px; padding: 11px 0; border-bottom: 1px solid var(--line); }
+    .feedback-item:last-child { border-bottom: 0; }
+    .feedback-item .icon { width: 15px; color: var(--brand); }
+    .feedback-item strong { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+    .feedback-item small { display: block; margin-top: 3px; color: var(--muted); font-size: 9px; }
+    .feedback-item b { color: var(--green); font-size: 10px; }
+    .trend-panel { padding: 17px 18px; }
+    .trend-controls { display: flex; align-items: center; gap: 7px; }
+    .trend-controls button { padding: 4px 8px; border: 0; color: var(--muted); background: transparent; font-size: 10px; }
+    .trend-controls button.active { border-radius: 4px; color: var(--brand); background: var(--brand-soft); font-weight: 700; }
+    .trend-chart { position: relative; height: 210px; margin-top: 20px; padding: 14px 16px 26px; border-bottom: 1px solid var(--line); background: repeating-linear-gradient(to bottom, transparent 0, transparent 40px, #eeece8 41px); }
+    .trend-svg { width: 100%; height: 100%; overflow: visible; }
+    .trend-axis { display: flex; justify-content: space-between; margin-top: 8px; color: var(--muted); font-size: 9px; }
+    .trend-legend { display: flex; gap: 18px; margin-top: 12px; color: var(--muted); font-size: 10px; }
+    .trend-legend .line { display: inline-block; width: 18px; height: 2px; margin-right: 5px; vertical-align: middle; background: var(--blue); }
+    .trend-legend .line.red { background: var(--brand); }
+    .trend-legend .line.green { background: var(--green); }
+    .trend-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 15px; }
+    .trend-summary-card { padding: 10px 12px; border: 1px solid #e5e0d9; background: #fbfaf8; }
+    .trend-summary-card span, .trend-summary-card small { display: block; color: var(--muted); font-size: 10px; }
+    .trend-summary-card strong { display: inline-block; margin: 5px 8px 0 0; font-size: 19px; }
+    .trend-summary-card em { color: var(--green); font-size: 10px; font-style: normal; font-weight: 700; }
+    .org-table { width: 100%; margin-top: 15px; border-collapse: collapse; font-size: 10px; }
+    .org-table th { padding: 7px 0; color: var(--muted); font-weight: 500; text-align: left; }
+    .org-table td { padding: 9px 0; border-top: 1px solid #ecebe7; }
+    .org-table td:last-child, .org-table th:last-child { text-align: right; }
+    .org-rate { color: var(--green); font-weight: 700; }
+    @media (max-width: 1080px) {
+      .topbar { padding: 0 20px; }
+      .page { padding: 24px 20px 48px; }
+      .brand { min-width: 205px; }
+      .kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .kpi:nth-child(4), .kpi:nth-child(5) { grid-column: span 1; }
+      .grid-3, .grid-process, .feedback-grid { grid-template-columns: 1fr; }
+      .feedback-flow { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .feedback-flow-arrow { display: none; }
+    }
+    @media (max-width: 720px) {
+      .topbar { height: auto; padding: 13px 16px; }
+      .topbar-meta { display: none; }
+      .brand { min-width: 0; }
+      .page { padding: 20px 14px 40px; }
+      .page-head, .scopebar { align-items: stretch; flex-direction: column; }
+      .head-actions, .scope-left, .scope-right { flex-wrap: wrap; }
+      .kpi-grid, .grid-2 { grid-template-columns: 1fr; }
+      .kpi { min-height: 120px; }
+      .feedback-hero { grid-template-columns: 1fr; }
+      .feedback-flow { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+      .feedback-main { padding-bottom: 14px; border-right: 0; border-bottom: 1px solid #ead1cf; }
+      .feedback-breakdown { min-height: 130px; }
+      .trend-summary { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark">湖北<br>供销</span><div><strong>湖北供销·心声</strong><small>数据驾驶舱 · 运行总览</small></div></div>
+      <div class="topbar-spacer"></div>
+      <div class="topbar-meta"><span>数据更新于 2026-09-29 15:20</span><span class="badge">授权范围：省社本级及授权组织</span><span>领导查看</span></div>
+    </header>
+
+    <main class="page">
+      <div class="page-head">
+        <div><div class="eyebrow">运行总览</div><h1>数据驾驶舱</h1><p class="intro">看职工是否参与，知道职工关注什么，判断问题是否得到处理，确认结果是否公开反馈。</p></div>
+        <div class="head-actions"><button class="btn"><i data-lucide="file-chart-column" class="icon"></i>生成报表</button><button class="btn primary"><i data-lucide="download" class="icon"></i>导出数据</button></div>
+      </div>
+
+      <section class="scopebar">
+        <div class="scope-left"><span class="scope-label"><i data-lucide="calendar-range" class="icon"></i>统计周期</span><div class="segmented" id="periods"><button>本周</button><button class="active">本月</button><button>本季度</button><button>自定义</button></div></div>
+        <div class="scope-right"><select class="select"><option>全部组织</option><option>省社本级</option><option>市州社</option><option>直属企业</option></select><select class="select"><option>全部诉求类型</option><option>建言献策</option><option>心声诉求</option><option>业务交流</option></select><button class="btn"><i data-lucide="sliders-horizontal" class="icon"></i>应用筛选</button></div>
+      </section>
+
+      <div class="section-label"><div class="section-title-wrap"><span class="section-index">00</span><div><h2>首屏核心指标</h2><p>先看参与、关注、办理与公开反馈的结果</p></div></div><span class="section-intent">结果层</span></div>
+      <section class="kpi-grid">
+        <article class="kpi"><div class="kpi-head"><i data-lucide="users-round" class="icon"></i>职工活跃度</div><strong class="kpi-value">68.4%</strong><div class="kpi-note"><span class="up">↑ 4.8%</span> 较上月 · 2,184 / 3,193 人</div></article>
+        <article class="kpi"><div class="kpi-head"><i data-lucide="flame" class="icon"></i>热点诉求</div><strong class="kpi-value">24</strong><div class="kpi-note"><span class="up">↑ 6 项</span> 关注度上升的诉求</div></article>
+        <article class="kpi"><div class="kpi-head"><i data-lucide="message-square-reply" class="icon"></i>回复率</div><strong class="kpi-value">84.7%</strong><div class="kpi-note"><span class="up">↑ 3.2%</span> 已回复 127 / 登记 150 项</div></article>
+        <article class="kpi"><div class="kpi-head"><i data-lucide="timer" class="icon"></i>平均响应时长</div><strong class="kpi-value">2.6 天</strong><div class="kpi-note"><span class="down">↓ 0.7 天</span> 较上月 · 以登记到首次回复计</div></article>
+        <article class="kpi"><div class="kpi-head"><i data-lucide="megaphone" class="icon"></i>回音壁发布</div><strong class="kpi-value">18</strong><div class="kpi-note"><span class="up">↑ 5 条</span> 本期已公开反馈</div></article>
+      </section>
+
+      <div class="section-label"><div class="section-title-wrap"><span class="section-index">01</span><div><h2>职工参与</h2><p>平台有没有被职工真正使用？</p></div></div><span class="section-intent">参与层 · 看使用</span></div>
+      <section class="grid-2">
+        <article class="panel panel-pad"><div class="panel-head"><div><div class="panel-heading"><h3 class="panel-title">参与概览</h3><span class="purpose-tag structure">结构</span></div><p class="panel-subtitle">统计周期内产生发帖、评论或互动行为的职工</p></div><span class="tiny-badge">本月</span></div><div class="participation-stats"><div><strong>724</strong><span>发帖人数</span></div><div><strong>1,086</strong><span>评论人数</span></div><div><strong>2,184</strong><span>互动人数</span></div></div><p class="formula">职工活跃度 = 活跃职工人数 ÷ 已启用职工人数。互动人数按点赞、收藏、分享或评论去重统计。</p></article>
+        <article class="panel panel-pad"><div class="panel-head"><div><div class="panel-heading"><h3 class="panel-title">参与趋势</h3><span class="purpose-tag">趋势</span></div><p class="panel-subtitle">活跃职工人数与发帖人数按周变化</p></div><span class="tiny-badge">近 4 周</span></div><div class="bar-chart"><div class="bar-item"><div class="bar" style="height:52%"></div><small>第 1 周</small></div><div class="bar-item"><div class="bar" style="height:68%"></div><small>第 2 周</small></div><div class="bar-item"><div class="bar" style="height:61%"></div><small>第 3 周</small></div><div class="bar-item"><div class="bar" style="height:86%"></div><small>第 4 周</small></div><div class="bar-item"><div class="bar" style="height:74%"></div><small>本周</small></div></div><div class="chart-legend"><span><i class="legend-dot"></i>活跃职工人数</span><span><i class="legend-dot cyan"></i>发帖人数</span></div></article>
+      </section>
+      <section class="panel panel-pad" style="margin-top:14px"><div class="panel-head"><div><div class="panel-heading"><h3 class="panel-title">各组织参与情况</h3><span class="purpose-tag action">动作</span></div><p class="panel-subtitle">按活跃度排序，识别参与不足的组织</p></div><button class="btn">查看全部组织</button></div><table class="org-table"><thead><tr><th>组织</th><th>活跃职工</th><th>发帖人数</th><th>活跃度</th></tr></thead><tbody><tr><td>省社本级</td><td>438</td><td>126</td><td class="org-rate">82.4%</td></tr><tr><td>武汉市供销社</td><td>321</td><td>98</td><td class="org-rate">76.1%</td></tr><tr><td>宜昌市供销社</td><td>268</td><td>71</td><td class="org-rate">70.8%</td></tr><tr><td>直属企业</td><td>205</td><td>53</td><td class="org-rate">61.7%</td></tr></tbody></table></section>
+
+      <div class="section-label"><div class="section-title-wrap"><span class="section-index">02</span><div><h2>诉求关注</h2><p>职工最近最关心什么？</p></div></div><span class="section-intent">认知层 · 看问题</span></div>
+      <section class="grid-3">
+        <article class="panel panel-pad"><div class="panel-head"><div><div class="panel-heading"><h3 class="panel-title">热点诉求排行</h3><span class="purpose-tag">结果</span></div><p class="panel-subtitle">按浏览、点赞、评论综合关注度</p></div><span class="tiny-badge">Top 5</span></div><div class="rank-list"><div class="rank-row"><span class="rank">1</span><div><strong>基层社培训报名流程优化</strong><small>浏览 2,841 · 点赞 328 · 评论 86</small></div><span class="score">92</span></div><div class="rank-row"><span class="rank">2</span><div><strong>农产品采购信息更新频率</strong><small>浏览 2,306 · 点赞 272 · 评论 64</small></div><span class="score">84</span></div><div class="rank-row"><span class="rank">3</span><div><strong>机关食堂晚餐供应时段</strong><small>浏览 1,854 · 点赞 211 · 评论 43</small></div><span class="score">76</span></div><div class="rank-row"><span class="rank">4</span><div><strong>县域配送线路信息公示</strong><small>浏览 1,326 · 点赞 165 · 评论 31</small></div><span class="score">68</span></div></div></article>
+        <article class="panel panel-pad"><div class="panel-head"><div><div class="panel-heading"><h3 class="panel-title">高频问题</h3><span class="purpose-tag structure">结构</span></div><p class="panel-subtitle">近 30 天重复出现的关键词</p></div><span class="tiny-badge">12 个问题簇</span></div><div class="keyword-cloud"><span class="keyword hot">培训报名</span><span class="keyword hot">信息更新</span><span class="keyword">基层网点</span><span class="keyword">配送线路</span><span class="keyword">食堂时段</span><span class="keyword">材料共享</span><span class="keyword">费用报销</span><span class="keyword">系统登录</span></div><div class="notice"><i data-lucide="copy-check" class="icon"></i><span>本期识别到 7 个重复诉求，建议合并为共性问题统一回应。</span></div></article>
+        <article class="panel panel-pad"><div class="panel-head"><div><div class="panel-heading"><h3 class="panel-title">诉求类型分布</h3><span class="purpose-tag structure">结构</span></div><p class="panel-subtitle">按登记诉求分类统计</p></div><span class="tiny-badge">150 项</span></div><div class="distribution"><div class="dist-row"><header><span>心声诉求</span><strong>58 · 38.7%</strong></header><div class="track"><i style="width:78%"></i></div></div><div class="dist-row"><header><span>建言献策</span><strong>42 · 28.0%</strong></header><div class="track"><i class="gold" style="width:56%"></i></div></div><div class="dist-row"><header><span>业务交流</span><strong>31 · 20.7%</strong></header><div class="track"><i class="green" style="width:41%"></i></div></div><div class="dist-row"><header><span>其他</span><strong>19 · 12.6%</strong></header><div class="track"><i class="purple" style="width:25%"></i></div></div></div></article>
+      </section>
+
+      <div class="section-label"><div class="section-title-wrap"><span class="section-index">03</span><div><h2>诉求办理</h2><p>职工提出的问题处理到什么程度？</p></div></div><span class="section-intent">执行层 · 看进度</span></div>
+      <section class="grid-process">
+        <article class="panel panel-pad"><div class="panel-head"><div><div class="panel-heading"><h3 class="panel-title">事项办理状态</h3><span class="purpose-tag">结果</span></div><p class="panel-subtitle">四种状态互斥统计，合计 150 项</p></div><span class="tiny-badge">共 150 项</span></div><div class="status-flow"><div class="status-row"><span>待处理</span><div class="track"><i class="gold" style="width:18%"></i></div><strong>8</strong></div><div class="status-row"><span>处理中</span><div class="track"><i style="width:34%"></i></div><strong>15</strong></div><div class="status-row"><span>已回复</span><div class="track"><i class="green" style="width:85%"></i></div><strong>127</strong></div><div class="status-row"><span>无需处理</span><div class="track"><i class="purple" style="width:8%"></i></div><strong>0</strong></div></div><div class="notice"><i data-lucide="clock-3" class="icon"></i><span>当前有 8 项超过承诺响应时限，需进入临期跟踪。</span><b>查看超时</b></div></article>
+        <article class="panel panel-pad"><div class="panel-head"><div><div class="panel-heading"><h3 class="panel-title">办理效率</h3><span class="purpose-tag action">动作</span></div><p class="panel-subtitle">以已回复事项为计算样本</p></div><span class="tiny-badge green">较上月改善</span></div><div class="response-metrics"><div class="response-metric"><span>回复率</span><strong>84.7%</strong><small class="up">↑ 3.2%</small></div><div class="response-metric"><span>平均响应时长</span><strong>2.6 天</strong><small class="up">↓ 0.7 天</small></div><div class="response-metric"><span>超时事项</span><strong>8</strong><small class="down">↑ 2 项</small></div><div class="response-metric"><span>退回修改</span><strong>6</strong><small>占登记量 4.0%</small></div></div></article>
+      </section>
+
+      <div class="section-label"><div class="section-title-wrap"><span class="section-index">04</span><div><h2>公开反馈</h2><p>平台有没有把处理结果反馈给职工？</p></div></div><span class="section-intent">结果层 · 看触达</span></div>
+      <section class="feedback-grid">
+        <article class="panel"><div class="feedback-flow"><div class="feedback-flow-node"><span>已回复</span><strong>127</strong><small>全部办理结果</small></div><i class="feedback-flow-arrow"></i><div class="feedback-flow-node"><span>可公开</span><strong>42</strong><small>符合公开条件</small></div><i class="feedback-flow-arrow"></i><div class="feedback-flow-node"><span>已公开</span><strong>18</strong><small>回音壁发布</small><em>42.9%</em></div><i class="feedback-flow-arrow"></i><div class="feedback-flow-node"><span>被浏览</span><strong>4,826</strong><small>职工查看次数</small><em>↑ 12%</em></div></div></article>
+        <article class="panel panel-pad"><div class="panel-head"><div><div class="panel-heading"><h3 class="panel-title">最近公开反馈</h3><span class="purpose-tag action">动作</span></div><p class="panel-subtitle">管理结果是否被看见</p></div><span class="tiny-badge green">反馈趋势 ↑ 12%</span></div><div class="feedback-list"><div class="feedback-item"><i data-lucide="megaphone" class="icon"></i><div><strong>基层社培训报名流程优化答复</strong><small>建言献策 · 09月28日发布</small></div><b>1,248 浏览</b></div><div class="feedback-item"><i data-lucide="megaphone" class="icon"></i><div><strong>机关食堂晚餐供应时段调整说明</strong><small>心声诉求 · 09月26日发布</small></div><b>836 浏览</b></div><div class="feedback-item"><i data-lucide="megaphone" class="icon"></i><div><strong>县域配送线路信息公示改进结果</strong><small>业务交流 · 09月24日发布</small></div><b>692 浏览</b></div></div></article>
+      </section>
+
+      <div class="section-label"><div class="section-title-wrap"><span class="section-index">05</span><div><h2>运营趋势</h2><p>平台运行情况是在改善还是恶化？</p></div></div><span class="section-intent">趋势层 · 看变化</span></div>
+      <section class="panel trend-panel"><div class="panel-head"><div><div class="panel-heading"><h3 class="panel-title">核心运营指标趋势</h3><span class="purpose-tag">趋势</span></div><p class="panel-subtitle">支持周、月、季度及自定义时间段，并显示环比变化</p></div><div class="trend-controls" id="trendPeriods"><button class="active">周</button><button>月</button><button>季度</button></div></div><div class="trend-chart"><svg class="trend-svg" viewBox="0 0 900 170" preserveAspectRatio="none" aria-label="运营趋势折线图"><polyline points="0,130 90,116 180,123 270,92 360,105 450,76 540,84 630,56 720,70 810,38 900,49" fill="none" stroke="#b72b31" stroke-width="3"/><polyline points="0,144 90,136 180,141 270,122 360,127 450,111 540,116 630,94 720,102 810,84 900,90" fill="none" stroke="#ba765d" stroke-width="3"/><polyline points="0,155 90,150 180,152 270,146 360,149 450,134 540,139 630,128 720,132 810,119 900,122" fill="none" stroke="#4f816b" stroke-width="3"/></svg></div><div class="trend-axis"><span>09/01</span><span>09/05</span><span>09/10</span><span>09/15</span><span>09/20</span><span>09/25</span><span>09/29</span></div><div class="trend-legend"><span><i class="line"></i>活跃职工人数</span><span><i class="line red"></i>诉求量</span><span><i class="line green"></i>回复率</span></div><div class="trend-summary"><div class="trend-summary-card"><span>活跃职工人数</span><strong>2,184</strong><em>↑ 4.8%</em><small>较上月</small></div><div class="trend-summary-card"><span>诉求量</span><strong>150</strong><em>↑ 8.1%</em><small>较上月</small></div><div class="trend-summary-card"><span>回复率</span><strong>84.7%</strong><em>↑ 3.2%</em><small>较上月</small></div></div></section>
+    </main>
+  </div>
+  <script>
+    if (window.lucide) window.lucide.createIcons();
+    document.querySelectorAll('#periods button, #trendPeriods button').forEach((button) => {
+      button.addEventListener('click', () => {
+        button.parentElement.querySelectorAll('button').forEach((item) => item.classList.remove('active'));
+        button.classList.add('active');
+      });
+    });
+  </script>
+</body>
+</html>

@@ -86,8 +86,7 @@ function renderMobileProfile() {
   if (state.mobilePersonalSection) return renderMobilePersonalSection();
   const user = state.session;
   const entries = [
-    ['progress', 'route', '办理进度', '查看审核、分办、办理和回复状态', `${ownedStaffPosts().length} 条`],
-    ['posts', 'file-text', '我的发言', '查看发言内容与办理进度', `${ownedStaffPosts().length} 条`],
+    ['posts', 'file-text', '我的发言', '查看本人发布的内容和当前状态', `${ownedStaffPosts().length} 条`],
     ['favorites', 'star', '收藏', '查看已收藏的帖子内容', `${personalFavorites.length} 条`],
     ['interactions', 'heart', '互动', '查看评论、点赞和举报记录', `${personalInteractions.length} 条`]
   ];
