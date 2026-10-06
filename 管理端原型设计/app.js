@@ -58,7 +58,7 @@ const handlerNav = [
   ];
 const navByRole = {
   platform: [
-    ['工作总览', [['dashboard', '运营工作台', 'gauge']]],
+    ['工作总览', [['dashboard', '日常工作台', 'gauge']]],
     ['数据统计', leaderNav],
     ['内容管理', [['content-ledger', '信息台账管理', 'notebook-tabs'], ['announcements', '通知公告管理', 'megaphone'], ['banners', '轮播图管理', 'images'], ['echo', '回音壁管理', 'badge-check']]],
     ['事项办理', [['handler-dispatch', '事项处理', 'tags']]],
@@ -67,13 +67,13 @@ const navByRole = {
     ['系统设置', [['users', '用户管理', 'users'], ['organization', '组织架构', 'network'], ['permissions', '角色管理', 'key-round'], ['menu-management', '菜单管理', 'panels-top-left'], ['dictionary-management', '字典管理', 'book-open'], ['logs', '系统日志', 'scroll-text']]],
   ],
   content: [
-    ['工作总览', [['dashboard', '运营工作台', 'gauge']]],
+    ['工作总览', [['dashboard', '日常工作台', 'gauge']]],
     ['审核管理', [['content-review', '信息内容审核', 'shield-check'], ['comments', '评论审核', 'message-square'], ['report-review', '举报核查', 'flag-triangle-right']]],
     ['内容管理', [['content-ledger', '信息台账管理', 'notebook-tabs'], ['announcements', '通知公告管理', 'megaphone'], ['banners', '轮播图管理', 'images'], ['echo', '回音壁管理', 'badge-check']]],
     ['配置管理', [['categories', '栏目管理', 'panels-top-left'], ['sensitive', '敏感词库', 'scan-text']]],
   ],
   dispatch: [
-    ['工作总览', [['dashboard', '运营工作台', 'gauge']]],
+    ['工作总览', [['dashboard', '日常工作台', 'gauge']]],
     ['事项办理', [['handler-dispatch', '事项处理', 'tags'], ['rectifications', '整改台账', 'list-checks']]],
     ['分析与协同', [['statistics', '办理统计', 'chart-no-axes-combined'], ['audit', '操作留痕', 'scroll-text']]],
   ],
@@ -238,9 +238,90 @@ function renderPage() {
   return (pages[state.page] || renderDashboard)();
 }
 
+function refineOperationsWorkbench() {
+  document.querySelector('.wb-profile .wb-mini-stats')?.remove();
+
+  const profile = document.querySelector('.wb-profile');
+  const quickEntrances = document.querySelector('.wb-left > .wb-side-section:not(.wb-scope-note)');
+  const summarySection = document.querySelector('.wb-summary');
+  if (!profile || !summarySection || !window.PrototypeData) return;
+
+  quickEntrances?.remove();
+  summarySection.classList.add('wb-summary-results');
+
+  const data = PrototypeData.read();
+  const affairs = data.affairs || [];
+  const pendingTotal = [...document.querySelectorAll('.wb-queue-count')]
+    .reduce((total, item) => total + (Number(item.textContent) || 0), 0);
+  const processing = affairs.filter((item) => item.status === '处理中').length;
+  const replied = affairs.filter((item) => item.status === '已回复').length;
+  const parseStatusDate = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return null;
+    let normalized = raw
+      .replace(/年/g, '-')
+      .replace(/月/g, '-')
+      .replace(/日/g, '')
+      .replace(/\//g, '-');
+    if (/^\d{2}-\d{1,2}(?=\s|$)/.test(normalized)) normalized = `${new Date().getFullYear()}-${normalized}`;
+    const parsed = new Date(normalized.includes('T') ? normalized : normalized.replace(/\s+/, 'T'));
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  };
+  const statusDuration = (item) => {
+    const source = item.status === '待处理'
+      ? item.createdAt || item.reviewedAt
+      : item.classifiedAt || item.processingAt || item.updatedAt || item.createdAt || item.reviewedAt;
+    const start = parseStatusDate(source);
+    if (!start) return { days: null, label: '时长未记录', date: '起算时间未记录', longRunning: false };
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    start.setHours(0, 0, 0, 0);
+    const days = Math.max(0, Math.floor((today - start) / 86400000));
+    const date = `${item.status === '待处理' ? '生成于' : '进入处理'} ${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`;
+    return { days, label: `${item.status} ${days} 天`, date, longRunning: days >= 7 };
+  };
+  const openAffairs = affairs.filter((item) => ['待处理', '处理中'].includes(item.status));
+  const longRunning = openAffairs.filter((item) => statusDuration(item).longRunning).length;
+
+  summarySection.innerHTML = `
+    <button type="button" class="wb-summary-card is-pending" onclick="document.getElementById('work-queue')?.scrollIntoView({ behavior: 'smooth', block: 'start' })">
+      <span class="wb-summary-label">待我处理 <i class="metric-help" tabindex="0" data-tip="待我处理 = 内容审核 + 待处理事项 + 待公开反馈 + 评论审核 + 举报核查 + 用户审核。处理中事项不重复计入。" aria-label="待我处理统计口径">${icon('info')}</i></span>
+      <strong>${pendingTotal}</strong><small>6 类任务，点击查看</small>
+    </button>
+    <button type="button" class="wb-summary-card is-processing" data-action="nav" data-id="handler-dispatch">
+      <span class="wb-summary-label">处理中事项 <i class="metric-help" tabindex="0" data-tip="已完成分类并进入办理，但尚未形成回复的事项。" aria-label="处理中事项统计口径">${icon('info')}</i></span>
+      <strong>${processing}</strong><small>继续办理或形成回复</small>
+    </button>
+    <button type="button" class="wb-summary-card is-long-running" data-action="nav" data-id="handler-dispatch">
+      <span class="wb-summary-label">长时间未回复 <i class="metric-help" tabindex="0" data-tip="待处理事项从生成时间起算；处理中事项从完成分类或进入处理的时间起算；持续 7 天及以上且尚未回复的事项。" aria-label="长时间未回复统计口径">${icon('info')}</i><em class="wb-summary-flag">需关注</em></span>
+      <strong>${longRunning}</strong><small>持续 7 天及以上</small>
+    </button>
+    <button type="button" class="wb-summary-card is-replied" data-action="nav" data-id="handler-dispatch">
+      <span class="wb-summary-label">已回复事项 <i class="metric-help" tabindex="0" data-tip="已形成处理结果并完成回复的事项，是已完成工作，不计入待我处理。" aria-label="已回复事项统计口径">${icon('info')}</i></span>
+      <strong>${replied}</strong><small>已形成处理结果</small>
+    </button>`;
+
+  document.querySelectorAll('.wb-kicker').forEach((item) => item.remove());
+  document.querySelectorAll('.wb-focus-row').forEach((row) => {
+    const affair = affairs.find((item) => String(item.id) === String(row.dataset.id));
+    if (!affair) return;
+    const duration = statusDuration(affair);
+    const nextAction = affair.status === '待处理'
+      ? '完成分类或归档'
+      : affair.draft ? '核对并发送回复' : '整理结论并形成回复';
+    const status = row.querySelector(':scope > .badge');
+    if (!status) return;
+    row.classList.toggle('is-long-running', duration.longRunning);
+    status.insertAdjacentHTML('beforebegin', `
+      <span class="wb-focus-duration ${duration.longRunning ? 'is-long-running' : ''}"><strong>${duration.label}</strong><small>${duration.date}</small></span>
+      <span class="wb-focus-next"><strong>下一步</strong><small>${nextAction}</small></span>`);
+  });
+}
+
 function render() {
   const sidebarScroll = document.querySelector('.sidebar')?.scrollTop || 0;
   document.getElementById('app').innerHTML = renderShell();
+  refineOperationsWorkbench();
   document.querySelector('.sidebar').scrollTop = sidebarScroll;
   if (window.lucide) window.lucide.createIcons();
 }

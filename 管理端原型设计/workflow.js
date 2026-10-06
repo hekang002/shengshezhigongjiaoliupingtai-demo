@@ -218,12 +218,29 @@
   };
   const handlerBusinessType = (source) => source?.board === '心声诉求' ? '心声诉求' : '建言献策';
   const boardUpdateTime = () => new Date().toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+  const affairStatusDays = (affair) => {
+    const source = affair.status === '待处理'
+      ? affair.createdAt || affair.reviewedAt
+      : affair.classifiedAt || affair.processingAt || affair.updatedAt || affair.createdAt || affair.reviewedAt;
+    let normalized = String(source || '').trim()
+      .replace(/年/g, '-')
+      .replace(/月/g, '-')
+      .replace(/日/g, '')
+      .replace(/\//g, '-');
+    if (!normalized) return null;
+    if (/^\d{2}-\d{1,2}(?=\s|$)/.test(normalized)) normalized = `${new Date().getFullYear()}-${normalized}`;
+    const start = new Date(normalized.includes('T') ? normalized : normalized.replace(/\s+/, 'T'));
+    if (Number.isNaN(start.getTime())) return null;
+    const current = new Date();
+    current.setHours(0, 0, 0, 0);
+    start.setHours(0, 0, 0, 0);
+    return Math.max(0, Math.floor((current - start) / 86400000));
+  };
   const affairAttentionRank = (affair) => {
-    const deadline = deadlineFlag(affair);
-    if (deadline === '逾期') return 0;
-    if (deadline === '临期') return 1;
-    if (affair.isKey || ['紧急', '重点'].includes(affair.priority)) return 2;
-    return 3;
+    const days = affairStatusDays(affair);
+    if (days !== null && days >= 7) return -days;
+    if (affair.isKey || ['紧急', '重点'].includes(affair.priority)) return 1000 - (days || 0);
+    return 2000 - (days || 0);
   };
   function update(action, entity, id, fn, message) {
     const data = db();
@@ -244,31 +261,28 @@
     const replied = data.affairs.filter((affair) => affair.status === '已回复').length;
     const noAction = data.affairs.filter((affair) => ['无需处理', '已归档'].includes(affair.status)).length;
     if (state.role === 'platform') {
-      const topicCount = affairTopics(data).length;
-      const archived = data.affairs.filter((affair) => affair.status === '已归档').length;
-      const publicPosts = data.posts.filter((post) => PrototypeData.isPublicPost(post)).length;
       const pendingComments = data.comments.filter((comment) => comment.status === '待审核').length;
       const pendingReports = data.reports.filter((report) => report.status === '待核查').length;
       const pendingUsers = (data.accounts || []).filter((account) => account.status === 'pending').length;
       const pendingPublications = data.affairs.filter((affair) => affair.status === '已回复' && !(data.echoPublications || []).some((item) => String(item.affairId) === String(affair.id) && item.status === '已发布')).length;
       const queue = [
-        [pending, '内容审核', '敏感内容待人工判断', 'shield-check', 'content-review', '审核'],
-        [waiting, '待处理事项', '需要完成事项分类或归档', 'tags', 'handler-dispatch', '处理'],
-        [active, '处理中事项', '可建立专题或统一回复', 'layers-3', 'handler-dispatch', '查看'],
-        [pendingPublications, '待公开反馈', '已回复但尚未发布到回音壁', 'megaphone', 'handler-dispatch', '发布'],
-        [pendingComments + pendingReports, '互动核查', `评论 ${pendingComments} · 举报 ${pendingReports}`, 'flag-triangle-right', 'comments', '核查']
-      ].filter(([count]) => count > 0);
+        [pending, '内容审核', '命中敏感规则，等待人工判断', 'shield-check', 'content-review', '审核'],
+        [waiting, '待处理事项', '完成分类、归组或归档', 'tags', 'handler-dispatch', '处理'],
+        [pendingPublications, '待公开反馈', '回复已形成，确认范围后公开', 'megaphone', 'echo', '公开'],
+        [pendingComments, '评论审核', '核对命中规则的评论', 'message-square', 'comments', '审核'],
+        [pendingReports, '举报核查', '核实举报并记录处理结论', 'flag-triangle-right', 'report-review', '核查'],
+        [pendingUsers, '用户审核', '核验注册资料并决定是否启用', 'user-round-check', 'user-review', '审核']
+      ];
       const quickLinks = [
         ['content-review', '内容审核', '判断内容是否可以公开', 'shield-check'],
         ['handler-dispatch', '事项处理', '分类、归组、回复诉求', 'tags'],
         ['echo', '回音壁管理', '维护公开反馈结果', 'megaphone'],
         ['leader-dashboard', '数据驾驶舱', '查看参与与办理趋势', 'chart-spline']
       ];
-      const recent = data.audit.slice(0, 6);
       const today = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
       const priority = data.affairs.filter((affair) => ['待处理', '处理中'].includes(affair.status)).sort((a, b) => affairAttentionRank(a) - affairAttentionRank(b)).slice(0, 5);
-      return heading('运营工作台', '围绕内容审核、事项处理和公开反馈组织每日工作。', `<div class="wb-head-meta"><span>${icon('calendar-days')}${today}</span><span>${icon('refresh-cw')}更新于 ${boardUpdateTime()}</span><button class="btn btn-secondary" onclick="showToast('运营日报已生成')">${icon('download')}导出日报</button></div>`) +
-        `<div class="wb-layout"><aside class="wb-left"><section class="wb-profile"><div class="wb-profile-top"><div class="wb-avatar">${roleInfo[state.role].avatar}</div><div><span>当前工作身份</span><h2>${safe(currentAccount().name)}</h2><p>${safe(roleInfo[state.role].label)} · ${safe(currentAccount().department || '平台管理组')}</p></div></div><div class="wb-profile-scope">${icon('building-2')}省社本级及授权组织<span>数据范围</span></div><div class="wb-mini-stats"><button data-action="nav" data-id="content-review"><strong>${pending}</strong><span>待审核</span></button><button data-action="nav" data-id="handler-dispatch"><strong>${waiting}</strong><span>待处理</span></button><button data-action="nav" data-id="handler-dispatch"><strong>${active}</strong><span>处理中</span></button><button data-action="nav" data-id="handler-dispatch"><strong>${pendingPublications}</strong><span>待公开</span></button></div></section><section class="wb-side-section"><header><h3>常用入口</h3><button class="text-link" data-action="nav" data-id="leader-dashboard">查看驾驶舱</button></header><div class="wb-quick-grid">${quickLinks.map(([page,label,note,symbol])=>`<button data-action="nav" data-id="${page}"><span class="wb-quick-icon">${icon(symbol)}</span><strong>${label}</strong><small>${note}</small></button>`).join('')}</div></section><section class="wb-side-section wb-scope-note"><header><h3>工作口径</h3></header><p>建言献策、心声诉求审核通过后进入事项处理；业务交流只做内容发布，不生成事项。</p></section></aside><main class="wb-center"><section class="wb-summary"><div><span>今日工作概览</span><strong>${pending + waiting + pendingPublications}</strong><small>项需要关注</small></div><div><span>已回复事项</span><strong>${replied}</strong><small>累计处理结果</small></div><div><span>专题办理</span><strong>${topicCount}</strong><small>用于集中处理同类事项</small></div><div><span>公开内容</span><strong>${publicPosts}</strong><small>当前已公开内容</small></div></section><section class="wb-panel wb-todo"><header><div><span class="wb-kicker">TODAY'S WORK</span><h2>我的工作队列</h2><p>按业务状态进入下一步处理，不展示人员派发关系。</p></div><button class="text-link" data-action="nav" data-id="handler-dispatch">查看事项处理${icon('arrow-up-right')}</button></header><div class="wb-queue">${queue.map(([count,title,note,symbol,page,action])=>`<article><span class="wb-queue-icon">${icon(symbol)}</span><div><strong>${title}</strong><p>${note}</p></div><span class="wb-queue-count">${count}</span><button class="btn btn-sm ${count > 0 ? 'btn-primary' : 'btn-secondary'}" data-action="nav" data-id="${page}">${action}${icon('chevron-right')}</button></article>`).join('') || '<div class="wb-empty"><span class="wb-empty-icon">'+icon('circle-check')+'</span><strong>今天没有需要优先处理的事项</strong><p>新的审核和事项会在进入队列后显示。</p></div>'}</div></section><section class="wb-panel wb-focus"><header><div><span class="wb-kicker">ITEMS IN FOCUS</span><h2>事项处理进度</h2><p>只展示当前状态和下一步动作。</p></div><div class="wb-tabs"><button class="active">全部</button><button>待处理 ${waiting}</button><button>处理中 ${active}</button><button>已回复 ${replied}</button></div></header><div class="wb-focus-list">${priority.map((item)=>`<button class="wb-focus-row" data-action="affair-view" data-id="${safe(item.id)}"><span class="wb-status-dot ${item.status === '待处理' ? 'is-waiting' : 'is-processing'}"></span><span><strong>${safe(item.title)}</strong><small>${safe(item.id)} · ${safe(item.category || '待分类')} ${topicForAffair(data, item.id) ? `· ${safe(topicForAffair(data, item.id).name)}` : ''}</small></span>${badgeFor(item.status)}${icon('chevron-right')}</button>`).join('') || '<div class="wb-empty">暂无待处理或处理中的事项</div>'}</div></section></main><aside class="wb-right"><section class="wb-panel wb-reminders"><header><div><span class="wb-kicker">REMINDERS</span><h2>运营提醒</h2></div><span class="badge">实时</span></header><div class="wb-reminder-list"><div><span class="wb-reminder-mark is-red"></span><p><strong>${pending} 条内容待审核</strong><small>风险判断完成后，诉求内容才会进入事项处理</small></p></div><div><span class="wb-reminder-mark is-gold"></span><p><strong>${pendingPublications} 项回复待公开</strong><small>确认公开范围后发布到回音壁</small></p></div><div><span class="wb-reminder-mark is-blue"></span><p><strong>${archived} 项已归档</strong><small>保留处理记录，可在事项处理内还原</small></p></div><div><span class="wb-reminder-mark is-green"></span><p><strong>${pendingUsers} 个用户待审核</strong><small>审核通过后才可进入职工端</small></p></div></div></section><section class="wb-panel wb-activity"><header><div><span class="wb-kicker">RECENT ACTIVITY</span><h2>最近动态</h2></div><button class="text-link" data-action="nav" data-id="logs">查看留痕</button></header><div class="wb-activity-list">${recent.map((item)=>`<div><i></i><span><strong>${safe(item.action)}</strong><p>${safe(item.detail)}</p></span><time>${safe(item.at)}</time></div>`).join('') || '<p class="muted">暂无操作记录</p>'}</div></section><section class="wb-panel wb-rule"><span>${icon('info')}</span><div><strong>当前业务规则</strong><p>事项管理员直接完成分类、专题归组和回复，不再经过承办、分办或转办。</p></div></section></aside></div>`;
+      return heading('工作总览', '集中处理今天的审核、事项和公开任务，优先处理等待时间较长与重点事项。', `<div class="wb-head-meta"><span>${icon('calendar-days')}${today}</span><span>${icon('refresh-cw')}更新于 ${boardUpdateTime()}</span></div>`) +
+        `<div class="wb-layout"><aside class="wb-left"><section class="wb-profile"><div class="wb-profile-top"><div class="wb-avatar">${roleInfo[state.role].avatar}</div><div><span>当前工作身份</span><h2>${safe(currentAccount().name)}</h2><p>${safe(roleInfo[state.role].label)} · ${safe(currentAccount().department || '平台管理组')}</p></div></div><div class="wb-profile-scope">${icon('building-2')}省社本级及授权组织<span>数据范围</span></div><div class="wb-mini-stats"><button data-action="nav" data-id="content-review"><strong>${pending}</strong><span>待审核</span></button><button data-action="nav" data-id="handler-dispatch"><strong>${waiting}</strong><span>待处理</span></button><button data-action="nav" data-id="handler-dispatch"><strong>${active}</strong><span>处理中</span></button><button data-action="nav" data-id="handler-dispatch"><strong>${pendingPublications}</strong><span>待公开</span></button></div></section><section class="wb-side-section"><header><h3>常用入口</h3><button class="text-link" data-action="nav" data-id="leader-dashboard">查看驾驶舱</button></header><div class="wb-quick-grid">${quickLinks.map(([page,label,note,symbol])=>`<button data-action="nav" data-id="${page}"><span class="wb-quick-icon">${icon(symbol)}</span><strong>${label}</strong><small>${note}</small></button>`).join('')}</div></section><section class="wb-side-section wb-scope-note"><header><h3>工作口径</h3></header><p>建言献策、心声诉求审核通过后进入事项处理；业务交流只做内容发布，不生成事项。</p></section></aside><main class="wb-center"><section class="wb-summary"></section><section class="wb-panel wb-todo" id="work-queue"><header><div><h2>待我处理</h2><p>六类任务均可直接进入处理，顶部总数与此处保持一致。</p></div></header><div class="wb-queue">${queue.map(([count,title,note,symbol,page,action])=>`<article><span class="wb-queue-icon">${icon(symbol)}</span><div><strong>${title}</strong><p>${note}</p></div><span class="wb-queue-count">${count}</span><button class="btn btn-sm ${count > 0 ? 'btn-primary' : 'btn-secondary'}" data-action="nav" data-id="${page}">${action}${icon('chevron-right')}</button></article>`).join('')}</div></section><section class="wb-panel wb-focus"><header><div><h2>需关注事项</h2><p>展示待处理和处理中的事项，优先处理等待时间较长、紧急和重点事项。</p></div><div class="wb-focus-order">${icon('list-filter')}按处理优先级排序</div></header><div class="wb-focus-list">${priority.map((item)=>`<button class="wb-focus-row" data-action="affair-view" data-id="${safe(item.id)}"><span class="wb-status-dot ${item.status === '待处理' ? 'is-waiting' : 'is-processing'}"></span><span><strong>${safe(item.title)}</strong><small>${safe(item.id)} · ${safe(item.category || '待分类')} ${topicForAffair(data, item.id) ? `· ${safe(topicForAffair(data, item.id).name)}` : ''}</small></span>${badgeFor(item.status)}${icon('chevron-right')}</button>`).join('') || '<div class="wb-empty">暂无待处理或处理中的事项</div>'}</div></section></main><aside class="wb-right"></aside></div>`;
     }
     return heading(state.role === 'leader' ? '领导驾驶舱' : '事项工作台', '按授权范围查看内容审核、事项分类和回复进度。') +
       `<div class="grid grid-4">${[['敏感内容待审核', pending, 'content-review'], ['待处理事项', waiting, 'handler-dispatch'], ['处理中事项', active, 'handler-dispatch'], ['已回复事项', replied, 'handler-dispatch'], ['无需处理事项', noAction, 'handler-dispatch']].map(([label, value, page]) => `<button class="card stat stat-link" onclick="go('${page}')"><span class="stat-label">${label}</span><strong class="stat-value">${value}</strong><span class="stat-note">查看明细 →</span></button>`).join('')}</div>` +
