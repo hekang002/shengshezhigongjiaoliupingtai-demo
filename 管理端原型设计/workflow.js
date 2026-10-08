@@ -364,12 +364,9 @@
     const data = db();
     const pending = commentStatusComments(data, '待审核');
     const postCount = new Set(pending.map((comment) => String(comment.postId))).size;
-    const highRisk = pending.filter((comment) => commentRisk(comment, data) === '高').length;
-    const todayHandled = data.comments.filter((comment) => ['已发布', '已驳回'].includes(comment.status) && String(comment.reviewedAt || '').includes('09-16')).length;
     const counts = ['待审核', '已发布', '已驳回'].map((status) => [status, status, commentStatusComments(data, status).length]);
     const boards = [...new Set(data.posts.map((post) => post.board).filter(Boolean))];
     return heading('评论审核', '结合原帖上下文人工判断敏感规则命中评论，审核结果同步至职工端并留痕。', `<span class="badge red">待审核 ${postCount} 个帖子 / ${pending.length} 条评论</span>`) +
-      `<div class="comment-review-summary"><div><span>待审核评论</span><strong>${pending.length}</strong><small>进入人工审核队列</small></div><div><span>涉及帖子</span><strong>${postCount}</strong><small>按来源帖子汇总</small></div><div><span>高风险提示</span><strong>${highRisk}</strong><small>需优先人工判断</small></div><div><span>今日已处理</span><strong>${todayHandled}</strong><small>通过与驳回合计</small></div></div>` +
       contentTabs(counts, commentReviewTab, 'comment-review-tab', '评论审核状态') +
       `<div class="comment-review-filters"><label>关键词<input class="input" id="wf-comment-review-query" value="${safe(commentReviewFilters.query)}" placeholder="评论、作者或帖子标题"></label><label>来源栏目<select class="select" id="wf-comment-review-board"><option value="">全部栏目</option>${boards.map((board) => `<option ${commentReviewFilters.board === board ? 'selected' : ''}>${safe(board)}</option>`).join('')}</select></label><label>风险等级<select class="select" id="wf-comment-review-risk"><option value="">全部风险</option>${['高', '中', '低'].map((level) => `<option ${commentReviewFilters.risk === level ? 'selected' : ''} value="${level}">${level}风险</option>`).join('')}</select></label><label>提交时间<div class="review-date-range"><input class="input" id="wf-comment-review-from" type="date" value="${safe(commentReviewFilters.dateFrom)}"><em>至</em><input class="input" id="wf-comment-review-to" type="date" value="${safe(commentReviewFilters.dateTo)}"></div></label><div class="comment-review-filter-actions">${button('重置', 'comment-review-reset', '')}<button class="btn btn-sm btn-primary" type="button" onclick="ManagementWorkflow.commentReviewSearch()">${icon('search')}查询</button></div></div>` + commentReviewTable(data);
   }
@@ -394,13 +391,12 @@
     });
     const pending = data.reports.filter((report) => report.status === '待核查');
     const pendingPosts = new Set(pending.map((report) => String(report.postId))).size;
-    const repeated = [...new Set(pending.map((report) => String(report.postId)))].filter((postId) => new Set(pending.filter((report) => String(report.postId) === postId).map((report) => report.reporter || report.id)).size > 1).length;
     const resolved = data.reports.filter((report) => report.status === '已处理');
     const tabs = [['待核查', '待核查', pending.length], ['举报成立', '举报成立', resolved.filter((report) => report.resolution === '举报成立').length], ['举报不成立', '举报不成立', resolved.filter((report) => report.resolution === '举报不成立').length]];
     const categories = [...new Set(data.reports.map((report) => report.category).filter(Boolean))];
     const rows = list(['来源帖子', '举报人数 / 记录', '举报原因类型', reportReviewTab === '待核查' ? '最早举报' : '核查结果', '操作'], groups.map((group) => `<tr><td><strong>${safe(group.post?.title || '来源帖子不可用')}</strong><div class="td-sub">${safe(group.post?.board || '栏目未记录')} · 发帖人：${safe(group.post?.author || '未记录')}</div></td><td><strong>${group.reporterCount} 位用户</strong><div class="td-sub">共 ${group.reports.length} 条举报记录</div></td><td><div class="report-category-list">${group.categories.map((category) => badgeFor(category)).join('')}</div></td><td>${reportReviewTab === '待核查' ? `<strong>${safe(commentWaitText(group.earliest))}</strong><div class="td-sub">${safe(group.earliest)}</div>` : `<strong>${safe(reportReviewTab)}</strong><div class="td-sub">${safe(group.reports[0]?.reviewedAt || '时间未记录')}</div>`}</td><td><div class="row-actions">${button('帖子详情', 'post-detail', group.postId)}${button(reportReviewTab === '待核查' ? '核查举报' : '查看结果', 'report-group-detail', group.postId, reportReviewTab === '待核查' ? 'primary' : 'secondary')}</div></td></tr>`));
     return heading('举报核查', '按被举报内容归并核查举报原因，人工记录结论、处置意见并保留审计记录。', `<span class="badge red">待核查 ${pendingPosts} 个帖子 / ${pending.length} 条举报</span>`) +
-      `<div class="report-review-summary"><div><span>待核查举报</span><strong>${pending.length}</strong><small>等待人工核查</small></div><div><span>涉及帖子</span><strong>${pendingPosts}</strong><small>按来源内容归并</small></div><div><span>2人以上举报的帖子</span><strong>${repeated}</strong><small>建议优先处理</small></div><div><span>已处理</span><strong>${resolved.length}</strong><small>成立与不成立合计</small></div></div>` + contentTabs(tabs, reportReviewTab, 'report-review-tab', '举报核查状态') +
+      contentTabs(tabs, reportReviewTab, 'report-review-tab', '举报核查状态') +
       `<div class="report-review-filters"><label>关键词<input class="input" id="wf-report-review-query" value="${safe(reportReviewFilters.query)}" placeholder="帖子标题、举报原因或举报人"></label><label>举报原因类型<select class="select" id="wf-report-review-category"><option value="">全部类型</option>${categories.map((category) => `<option ${reportReviewFilters.category === category ? 'selected' : ''}>${safe(category)}</option>`).join('')}</select></label><label>举报时间<div class="review-date-range"><input class="input" id="wf-report-review-from" type="date" value="${safe(reportReviewFilters.dateFrom)}"><em>至</em><input class="input" id="wf-report-review-to" type="date" value="${safe(reportReviewFilters.dateTo)}"></div></label><div class="report-review-filter-actions">${button('重置', 'report-review-reset', '')}<button class="btn btn-sm btn-primary" type="button" onclick="ManagementWorkflow.reportReviewSearch()">${icon('search')}查询</button></div></div><div class="report-review-result"><div class="sensitive-result-head"><div class="result-title-with-tip"><strong>${safe(reportReviewTab)}记录</strong><span class="title-help" tabindex="0" aria-label="举报核查说明">${icon('circle-help')}<span class="title-help-popover">举报原因类型由职工提交举报时选择，仅作为核查线索，最终结论由审核人员判断。</span></span></div><span>共 ${groups.length} 个帖子、${sourceReports.length} 条举报</span></div>${rows}</div>`;
   }
   function traceQueryPage(review = false) {
@@ -645,15 +641,13 @@
     const visibleBoards = state.role === 'content' ? ['建言献策', '心声诉求'] : ['建言献策', '心声诉求', '业务交流'];
     contentReviewTypes = contentReviewTypes.filter((board) => visibleBoards.includes(board));
     const counts = (status) => source.filter((post) => contentReviewQueue(post, data) === status).length;
-    const highRisk = source.filter((post) => ['待审核', '风险待审'].includes(contentReviewQueue(post, data)) && contentRisk(post, data).level === '高').length;
-    const statusTabs = [['待审核', '审核中', counts('待审核')], ['风险待审', '风险待审', counts('风险待审')], ['已处理', '已处理', counts('已处理')]];
+    const statusTabs = [['待审核', '中低风险待审', counts('待审核')], ['风险待审', '高风险待审', counts('风险待审')], ['已处理', '已处理', counts('已处理')]];
     const typeSummary = !contentReviewTypes.length ? '全部类型' : contentReviewTypes.length === 1 ? contentReviewTypes[0] : `已选 ${contentReviewTypes.length} 项`;
     const typeOptions = visibleBoards.map((board) => `<label><input type="checkbox" value="${safe(board)}" aria-label="${safe(board)}" data-content-review-type ${contentReviewTypes.includes(board) ? 'checked' : ''} onchange="ManagementWorkflow.updateContentReviewTypeSummary()"><span>${safe(board)}</span><small>${source.filter((post) => post.board === board && contentReviewQueue(post, data) === contentReviewStatus).length}</small></label>`).join('');
     const typeSelect = `<div class="content-review-filter-field"><span>内容分类</span><div class="content-review-type-select"><details><summary><span id="wf-content-review-type-summary">${safe(typeSummary)}</span>${icon('chevron-down')}</summary><div class="content-review-type-menu" id="wf-content-review-types">${typeOptions}<div class="content-review-type-menu-foot"><span>支持多选</span><button type="button" onclick="ManagementWorkflow.clearContentReviewTypes()">重置</button></div></div></details></div></div>`;
-    const summary = `<div class="content-review-summary"><button data-action="content-review-status-tab" data-id="待审核"><span>审核中</span><strong>${counts('待审核')}</strong><small>普通人工审核队列</small></button><button data-action="content-review-status-tab" data-id="风险待审"><span>风险待审</span><strong>${counts('风险待审')}</strong><small>系统预警，需人工逐条审核</small></button><button data-action="content-review-status-tab" data-id="已处理"><span>已处理</span><strong>${counts('已处理')}</strong><small>可追溯审核记录</small></button><div class="risk"><span>系统风险预警</span><strong>${highRisk}</strong><small>敏感词、疑似个人信息及保护名单规则</small></div></div>`;
     const filters = `<div class="content-review-filters"><label>关键词<input class="input" id="wf-content-review-query" value="${safe(contentReviewFilters.query)}" placeholder="标题、编号、发布人或正文"></label>${typeSelect}<label>风险等级<select class="select" id="wf-content-review-risk"><option value="">全部风险</option>${['高', '中', '低'].map((level) => `<option value="${level}" ${contentReviewFilters.risk === level ? 'selected' : ''}>${level}风险</option>`).join('')}</select></label><label>发布状态<select class="select" id="wf-content-review-state"><option value="">全部状态</option>${['已发布', '未发布', '私密发布'].map((value) => `<option ${contentReviewFilters.contentState === value ? 'selected' : ''}>${value}</option>`).join('')}</select></label><label>提交时间<div class="review-date-range"><input class="input" id="wf-content-review-from" type="date" value="${safe(contentReviewFilters.dateFrom)}"><em>至</em><input class="input" id="wf-content-review-to" type="date" value="${safe(contentReviewFilters.dateTo)}"></div></label><div class="content-review-filter-actions">${button('重置', 'content-review-reset', '')}<button class="btn btn-sm btn-primary" type="button" onclick="ManagementWorkflow.contentReviewSearch()">${icon('search')}查询</button></div></div>`;
     const ruleNote = contentReviewRuleVisible ? `<div class="content-review-rule-note">${icon('shield-check')}<span>敏感词命中只作为风险提示，由审核人员结合内容语境作出发布或驳回决定。</span><button type="button" data-action="content-review-rule-close" aria-label="关闭提示" title="关闭提示">${icon('x')}</button></div>` : '';
-    return heading('信息内容审核', '仅处理命中敏感词的内容；未命中敏感词的内容直接发布，不进入人工审核。', `<span class="badge red">待处理 ${counts('待审核') + counts('风险待审')}</span>`) + summary + `<section class="content-review-workspace"><div class="content-review-level queue"><span>审核队列</span>${contentTabs(statusTabs, contentReviewStatus, 'content-review-status-tab', '审核状态', 'queue')}</div>${filters}${ruleNote}${contentReviewTable(data)}</section>`;
+    return heading('信息内容审核', '仅处理命中敏感词的内容；未命中敏感词的内容直接发布，不进入人工审核。', `<span class="badge red">待处理 ${counts('待审核') + counts('风险待审')}</span>`) + `<section class="content-review-workspace"><div class="content-review-level queue"><span>审核队列</span>${contentTabs(statusTabs, contentReviewStatus, 'content-review-status-tab', '审核状态', 'queue')}</div>${filters}${ruleNote}${contentReviewTable(data)}</section>`;
   }
   function assignment() {
     const data = db();
@@ -1018,10 +1012,9 @@
     const selected = statuses.some(([value]) => value === state.userReviewTab) ? state.userReviewTab : 'pending';
     const departments = [...new Set(accounts.map((item) => item.department).filter(Boolean))];
     const visible = accounts.filter((a) => { const submitted = a.submitted || a.createdAt || ''; const queryText = `${a.id} ${a.name} ${a.phone} ${a.department}`.toLocaleLowerCase(); return a.status === selected && (!userReviewFilters.query || queryText.includes(userReviewFilters.query.toLocaleLowerCase())) && (!userReviewFilters.department || a.department === userReviewFilters.department) && (!userReviewFilters.dateFrom || submitted >= userReviewFilters.dateFrom) && (!userReviewFilters.dateTo || submitted <= userReviewFilters.dateTo + ' 23:59'); });
-    const summary = `<div class="user-review-summary"><div><span>待审核</span><strong>${accounts.filter((a) => a.status === 'pending').length}</strong><small>需及时处理</small></div><div><span>今日申请</span><strong>${accounts.filter((a) => (a.submitted || a.createdAt || '').startsWith(today())).length}</strong><small>新增注册申请</small></div><div><span>已通过</span><strong>${accounts.filter((a) => a.status === 'approved').length}</strong><small>已开通账号</small></div><div><span>已驳回</span><strong>${accounts.filter((a) => a.status === 'rejected').length}</strong><small>可查看驳回原因</small></div></div>`;
     const filters = `<form class="user-review-filters" onsubmit="event.preventDefault();ManagementWorkflow.userReviewSearch()"><label><span>关键词</span><input class="input" id="wf-user-review-query" value="${safe(userReviewFilters.query)}" placeholder="姓名、手机号或申请编号"></label><label><span>申请部门</span><select class="select" id="wf-user-review-department"><option value="">全部部门</option>${departments.map((item) => `<option ${userReviewFilters.department === item ? 'selected' : ''}>${safe(item)}</option>`).join('')}</select></label><label><span>申请时间</span><div class="review-date-range"><input class="input" id="wf-user-review-from" type="date" value="${safe(userReviewFilters.dateFrom)}"><em>至</em><input class="input" id="wf-user-review-to" type="date" value="${safe(userReviewFilters.dateTo)}"></div></label><div class="user-review-filter-actions">${button('重置', 'user-review-reset', '')}<button class="btn btn-sm btn-primary" type="submit">查询</button></div></form>`;
     return heading('用户审核', '核验职工注册申请；审核结果同步至职工端的申请状态查询。', `<span class="badge red">待审核 ${accounts.filter((a) => a.status === 'pending').length}</span>`) +
-      summary + filters +
+      filters +
       `<div class="review-status-tabs" role="tablist" aria-label="用户审核状态">${statuses.map(([value, label]) => `<button type="button" role="tab" aria-selected="${selected === value}" class="review-status-tab ${selected === value ? 'active' : ''}" data-action="user-review-tab" data-id="${value}">${label}<span>${accounts.filter((a) => a.status === value).length}</span></button>`).join('')}</div>` +
       `<div class="user-review-result"><div class="sensitive-result-head"><strong>申请记录</strong><span>当前条件共 ${visible.length} 条</span></div>${list(['申请编号', '申请人', '联系方式', '申请部门', '申请时间', '审核状态', '操作'], visible.map((a) => `<tr><td><strong>${safe(applicationNo(a))}</strong></td><td><strong>${safe(a.name)}</strong></td><td>${safe(a.phone.slice(0, 3))}****${safe(a.phone.slice(-4))}</td><td>${safe(a.department || '未填写')}</td><td>${safe(a.submitted || a.createdAt || '未记录')}<div class="td-sub">${a.status === 'pending' ? '等待审核' : `处理于 ${safe(a.reviewedAt || '未记录')}`}</div></td><td>${badgeFor(selected === 'pending' ? '待审核' : selected === 'approved' ? '已通过' : '已驳回')}</td><td>${button(selected === 'pending' ? '审核申请' : '查看详情', 'account-review', a.id, selected === 'pending' ? 'primary' : 'secondary')}</td></tr>`))}</div>`;
   }
@@ -1128,6 +1121,87 @@
     const to = period.to || '';
     if (!from || !to) return leaderPeriod;
     return `${from.replace(/-/g, '.')} 至 ${to.replace(/-/g, '.')}`;
+  }
+  function exportLeaderAffairDetail() {
+    const scoped = leaderScopedData(db());
+    const model = leaderModel(scoped);
+    const period = leaderPeriodText(scoped);
+    const headers = ['统计周期', '模块', '指标 / 对象', '维度 / 分类', '数值', '单位', '说明'];
+    const rows = [];
+    const add = (module, metric, dimension, value, unit = '', note = '') => rows.push([period, module, metric, dimension, value, unit, note]);
+    const publicPosts = scoped.posts.filter((item) => !['待审核', '退回修改', '已驳回', '已隐藏'].includes(item.status));
+    const postAuthorIds = new Set(publicPosts.map((item) => item.authorId || item.author).filter(Boolean));
+    const publishedComments = scoped.comments.filter((item) => item.status === '已发布');
+    const commentAuthorIds = new Set(publishedComments.map((item) => item.authorId || item.author).filter(Boolean));
+    const participants = new Set([...postAuthorIds, ...commentAuthorIds]).size;
+    const eligibleUsers = Math.max(participants, (scoped.accounts || []).filter((item) => item.status === 'approved').length);
+    const participationRate = eligibleUsers ? Math.round(participants / eligibleUsers * 100) : 0;
+    const total = scoped.affairs.length;
+    const replyRate = total ? Math.round(model.replied.length / total * 100) : 0;
+    const responseTimes = model.replied.map((item) => { const start = Date.parse(item.createdAt || ''); const end = Date.parse(item.repliedAt || ''); return Number.isFinite(start) && Number.isFinite(end) && end >= start ? (end - start) / 86400000 : null; }).filter((value) => value !== null);
+    const avgResponse = responseTimes.length ? (responseTimes.reduce((sum, value) => sum + value, 0) / responseTimes.length).toFixed(1) : '';
+    const interactionCount = scoped.posts.reduce((sum, post) => { const engagement = post.engagement || PrototypeData.emptyEngagement(); return sum + (engagement.likes || 0) + (engagement.favorites || 0) + (engagement.shares || 0) + postComments(scoped, post.id).filter((item) => item.status === '已发布').length; }, 0);
+    const topHot = model.hotPosts[0];
+    add('首屏核心指标', '职工活跃度', '当前周期', participationRate, '%', `${participants} 人参与 / ${eligibleUsers} 人已启用`);
+    add('首屏核心指标', '热点诉求', topHot?.post.title || '暂无热点数据', topHot?.score || 0, '热度值', '浏览量 + 点赞量×5 + 收藏量×3 + 评论量×4 + 分享量×6');
+    add('首屏核心指标', '回复率', '当前周期', replyRate, '%', `已回复 ${model.replied.length} / 登记 ${total} 项`);
+    add('首屏核心指标', '平均响应时长', '已回复事项', avgResponse || '暂无', avgResponse ? '天' : '', `有效样本 ${responseTimes.length} 项`);
+    add('首屏核心指标', '回音壁发布', '当前周期', model.published.length, '条', '已公开反馈');
+    add('职工参与', '本期参与人数', '去重职工', participants, '人');
+    add('职工参与', '登记职工人数', '已启用账号', eligibleUsers, '人');
+    add('职工参与', '发帖人数', '去重职工', postAuthorIds.size, '人');
+    add('职工参与', '评论人数', '去重职工', commentAuthorIds.size, '人');
+    add('职工参与', '互动次数', '点赞+收藏+分享+已发布评论', interactionCount, '次');
+    const daily = new Map();
+    for (const item of model.hotPosts) for (const point of item.engagement.daily || []) {
+      const date = leaderIsoDate(point.date);
+      if (!date) continue;
+      const bucket = leaderPeriod === '本季度' ? date.slice(0, 7) : date;
+      const detail = daily.get(bucket) || { views: 0, likes: 0, comments: 0, favorites: 0, shares: 0 };
+      for (const key of Object.keys(detail)) detail[key] += Number(point[key] || 0);
+      daily.set(bucket, detail);
+    }
+    for (const [date, detail] of [...daily.entries()].sort((a, b) => a[0].localeCompare(b[0]))) add('参与趋势', '互动热度', date, detail.views + detail.likes + detail.comments + detail.favorites + detail.shares, '次', `浏览 ${detail.views}；点赞 ${detail.likes}；评论 ${detail.comments}；收藏 ${detail.favorites}；分享 ${detail.shares}`);
+    const accountsById = new Map((scoped.accounts || []).map((item) => [String(item.id), item]));
+    const participantByOrg = new Map();
+    const addParticipant = (key, department) => { const name = department || '未标注组织'; if (!participantByOrg.has(name)) participantByOrg.set(name, new Set()); participantByOrg.get(name).add(String(key)); };
+    for (const post of scoped.posts) { const account = accountsById.get(String(post.authorId)); if (post.authorId || account?.department || post.department) addParticipant(post.authorId || `post-${post.id}`, post.department || account?.department); }
+    for (const comment of publishedComments) { const account = accountsById.get(String(comment.authorId)); if (comment.authorId || account?.department || comment.department) addParticipant(comment.authorId || `comment-${comment.id}`, comment.department || account?.department); }
+    const enabledByOrg = new Map();
+    for (const account of scoped.accounts || []) if (account.status === 'approved' && account.department) enabledByOrg.set(account.department, (enabledByOrg.get(account.department) || 0) + 1);
+    for (const name of new Set([...enabledByOrg.keys(), ...participantByOrg.keys()])) { const active = participantByOrg.get(name)?.size || 0; const enabled = enabledByOrg.get(name) || 0; add('组织参与', name, '参与率', enabled ? Math.min(100, Math.round(active / enabled * 100)) : 0, '%', `本期参与 ${active} 人；组织职工 ${enabled} 人`); }
+    model.hotPosts.slice(0, 5).forEach((item, index) => add('热点诉求排行', item.post.title, `${index + 1} / ${item.post.board}`, item.score, '热度值', `浏览 ${item.engagement.views || 0}；点赞 ${item.engagement.likes || 0}；评论 ${item.comments}`));
+    [['待处理', model.pending.length], ['处理中', model.processing.length], ['已回复', model.replied.length], ['无需处理', model.noAction.length]].forEach(([status, value]) => add('诉求办理', '事项办理状态', status, value, '项'));
+    add('诉求办理', '逾期事项', '当前周期', scoped.affairs.filter((item) => deadlineFlag(item) === '逾期').length, '项');
+    add('办理效率', '回复率', '当前周期', replyRate, '%');
+    add('办理效率', '平均响应时长', '已回复事项', avgResponse || '暂无', avgResponse ? '天' : '');
+    add('办理效率', '退回修改', '当前周期', scoped.affairs.filter((item) => item.status === '退回修改').length, '项');
+    add('办理效率', '无需处理', '当前周期', model.noAction.length, '项');
+    const processingAffairs = scoped.affairs.filter((item) => item.status === '处理中');
+    for (const topic of model.topics) { const items = processingAffairs.filter((affair) => (topic.affairIds || []).some((itemId) => String(itemId) === String(affair.id))); if (items.length) add('专题办理', topic.name, '处理中', items.length, '项', topic.summary || ''); }
+    for (const category of new Set(scoped.affairs.map((item) => item.category || '待分类'))) { const count = scoped.affairs.filter((item) => (item.category || '待分类') === category).length; add('事项分类分布', category, '占比', total ? Math.round(count / total * 100) : 0, '%', `${count} 项`); }
+    const repliedIds = new Set(model.replied.map((item) => String(item.id)));
+    const publishedIds = new Set(model.published.map((item) => String(item.affairId)).filter(Boolean));
+    const canPublic = new Set([...model.replied.filter((item) => item.feedback === '公开答复').map((item) => String(item.id)), ...publishedIds].filter((id) => repliedIds.has(id))).size;
+    const publishedCount = [...publishedIds].filter((id) => repliedIds.has(id)).length;
+    const feedbackTouchCount = model.published.filter((item) => repliedIds.has(String(item.affairId))).reduce((sum, item) => { const metrics = interactionSummary(item, postComments(scoped, 6000 + Number(item.sourcePostId || 0))); return sum + metrics.views + metrics.comments + metrics.likes + metrics.favorites + metrics.shares; }, 0);
+    [['已回复事项', model.replied.length, '项'], ['可公开', canPublic, '项'], ['已公开', publishedCount, '项'], ['被触达', feedbackTouchCount, '次']].forEach(([metric, value, unit]) => add('公开反馈', metric, '反馈触达链路', value, unit));
+    model.published.forEach((item) => add('最近公开反馈', item.title, item.scope || '授权范围', item.publishedAt || '已发布', '', `回音壁记录 ${item.id}`));
+    const csvCell = (value) => {
+      let text = String(value ?? '').replace(/\r?\n/g, ' ');
+      if (/^[=+\-@]/.test(text)) text = `'${text}`;
+      return `"${text.replace(/"/g, '""')}"`;
+    };
+    const content = '\ufeff' + [headers, ...rows].map((row) => row.map(csvCell).join(',')).join('\r\n');
+    const url = URL.createObjectURL(new Blob([content], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `数据驾驶舱指标明细_${scoped.__leaderPeriod.from}_${scoped.__leaderPeriod.to}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    showToast(`已导出 ${rows.length} 条驾驶舱数据，可使用 Excel 打开`);
   }
   function leaderScopedEngagement(engagement, from, to) {
     const source = engagement || PrototypeData.emptyEngagement();
@@ -1302,7 +1376,7 @@
       ['megaphone', '回音壁发布', periodPublishedCount, '本期已公开反馈', 'is-public', `回音壁发布 = 统计周期内状态为“已发布”的公开反馈记录数；本期共 ${periodPublishedCount} 条`, 'feedback']
     ];
     return heading('数据驾驶舱', '围绕职工参与、诉求关注、诉求办理、公开反馈和运营趋势，查看授权组织范围内的平台运行情况。') +
-      `<div class="cockpit-scope"><div class="cockpit-scope-left">${icon('calendar-range')}<span>统计周期</span><small class="cockpit-period-help">应用于全部板块</small><div class="cockpit-periods" role="group" aria-label="统计周期">${['本周', '本月', '本季度', '自定义'].map((period) => `<button class="${leaderPeriod === period ? 'active' : ''}" data-action="leader-period-set" data-id="${period}">${period}</button>`).join('')}</div>${leaderPeriod === '自定义' ? `<div class="cockpit-custom-period"><input class="input" id="wf-leader-period-from" type="date" value="${safe(leaderCustomFrom)}" aria-label="开始日期"><span>至</span><input class="input" id="wf-leader-period-to" type="date" value="${safe(leaderCustomTo)}" aria-label="结束日期"><button class="btn btn-sm btn-primary" data-action="leader-period-apply">应用</button></div>` : ''}<span class="cockpit-period-range">${safe(periodText)}</span></div><div class="cockpit-scope-right"><span>授权组织范围：省社本级及授权组织</span><button class="btn btn-sm btn-secondary" onclick="showToast('驾驶舱数据已导出')">${icon('download')}导出数据</button></div></div>` +
+      `<div class="cockpit-scope"><div class="cockpit-scope-left">${icon('calendar-range')}<span>统计周期</span><small class="cockpit-period-help">应用于全部板块</small><div class="cockpit-periods" role="group" aria-label="统计周期">${['本周', '本月', '本季度', '自定义'].map((period) => `<button class="${leaderPeriod === period ? 'active' : ''}" data-action="leader-period-set" data-id="${period}">${period}</button>`).join('')}</div>${leaderPeriod === '自定义' ? `<div class="cockpit-custom-period"><input class="input" id="wf-leader-period-from" type="date" value="${safe(leaderCustomFrom)}" aria-label="开始日期"><span>至</span><input class="input" id="wf-leader-period-to" type="date" value="${safe(leaderCustomTo)}" aria-label="结束日期"><button class="btn btn-sm btn-primary" data-action="leader-period-apply">应用</button></div>` : ''}<span class="cockpit-period-range">${safe(periodText)}</span></div><div class="cockpit-scope-right"><span>授权组织范围：省社本级及授权组织</span><button class="btn btn-sm btn-secondary" data-action="leader-export-excel">${icon('download')}导出数据</button></div></div>` +
       `<section class="cockpit-result-section">${section('00', '首屏核心指标', '先看参与、关注、办理与公开反馈的结果')}<div class="cockpit-kpis">${metricCards.map(([symbol, label, value, note, tone, formula, target]) => `<button class="cockpit-kpi ${tone}" data-action="cockpit-jump" data-id="${target}"><header>${icon(symbol)}<span>${label}</span><i class="metric-help" tabindex="0" data-tip="${safe(formula)}" aria-label="${label}统计口径">${icon('info')}</i></header><strong>${safe(value)}</strong><p>${safe(note)}</p><small>查看明细 ${icon('arrow-up-right')}</small></button>`).join('')}</div></section>` +
       `<section class="cockpit-section">${section('01', '职工参与', '平台有没有被职工真正使用？', '参与层 · 看使用')}<div class="cockpit-grid cockpit-grid-participation"><div class="card card-pad cockpit-participation-card">${cardTitle('参与概览', '统计本期发帖、评论或互动过的职工', '', '<span class="badge">当前周期</span>')}<div class="cockpit-participation-summary"><div class="cockpit-participation-message"><span>本期平台参与情况</span><strong>有 <em>${participants}</em> 位职工参与平台</strong><p>在 ${eligibleUsers} 位已登记职工中，参与率为 <b>${participationRate}</b></p></div><div class="cockpit-participation-coverage"><div><strong>${participants}</strong><span>本期参与人数</span></div><div><strong>${eligibleUsers}</strong><span>登记职工人数</span></div><div><strong>${participationRate}</strong><span>参与率</span></div></div></div><div class="cockpit-participation-stats"><div><strong>${postAuthorIds.size}</strong><span>发帖人数</span></div><div><strong>${commentAuthorIds.size}</strong><span>评论人数</span></div><div><strong>${interactionCount}</strong><span>互动次数</span></div></div><div class="cockpit-participation-footnote">参与人数按周期内至少完成一次发帖、评论或互动的职工去重统计。</div></div><div class="card card-pad cockpit-participation-trend">${cardTitle('参与趋势', '每日互动热度 = 浏览量 + 点赞量 + 收藏量 + 分享量 + 评论量', '趋势')}<div class="cockpit-bars-head"><span>每日互动热度指数</span></div><div class="cockpit-bars-legend"><span><i class="is-bar"></i>每日互动热度</span><span><i class="is-line"></i>变化趋势</span></div><div class="cockpit-bars"><svg class="cockpit-bars-line" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="互动热度变化趋势"><polyline points="${trendLinePoints}"></polyline></svg>${trend.map(([date, value]) => { const detail = trendDetails(date); const label = trendLabel(date); const aria = `${label}，互动热度 ${value}，浏览 ${detail.views}，点赞 ${detail.likes}，评论 ${detail.comments}，收藏 ${detail.favorites}，分享 ${detail.shares}`; return `<div class="cockpit-bar" tabindex="0" aria-label="${safe(aria)}"><span class="cockpit-bar-tip" role="tooltip"><b>${safe(label)}</b><strong>互动热度 ${value}</strong><small>浏览 ${detail.views} · 点赞 ${detail.likes} · 评论 ${detail.comments}，收藏 ${detail.favorites}，分享 ${detail.shares}</small></span><strong>${value}</strong><i class="${value ? '' : 'is-empty'}" style="height:${value ? Math.max(10, value / maxTrend * 100) : 0}%"></i><small>${safe(label)}</small></div>`; }).join('') || '<p class="muted">暂无趋势数据</p>'}</div></div></div><div class="card card-pad cockpit-org-card">${cardTitle('组织参与情况', '看各组织有多少人参与平台', '', orgActions)}<div class="cockpit-org-summary"><span>组织数量 <strong>${orgRows.length}</strong> 个</span><span>平均参与率 <strong>${orgRows.length ? Math.round(orgRows.reduce((sum, [, , , rate]) => sum + rate, 0) / orgRows.length) : 0}%</strong></span></div><table class="cockpit-table"><thead><tr><th>组织</th><th>本期参与人数</th><th>组织职工人数</th><th>参与率</th></tr></thead><tbody>${orgRows.map(([name, participating, enabled, rate], index) => `<tr><td><div class="cockpit-org-name"><span class="cockpit-org-rank">${String(index + 1).padStart(2, '0')}</span><strong>${safe(name)}</strong></div></td><td><strong>${participating}</strong></td><td>${enabled}</td><td><div class="cockpit-org-coverage"><div><i style="width:${rate}%"></i></div><strong>${rate}%</strong></div></td></tr>`).join('') || '<tr><td colspan="4" class="empty">暂无组织数据</td></tr>'}</tbody></table><p class="cockpit-org-footnote">参与率 = 本期参与人数 ÷ 组织职工人数。参与包括发帖、评论、点赞、收藏和分享。</p></div></section>` +
       `<section class="cockpit-section">${section('02', '诉求关注', '职工最近最关心什么？')}<div class="cockpit-grid cockpit-grid-focus cockpit-grid-focus-hot"><div class="card card-pad">${cardTitle('热点诉求排行', '按浏览、点赞、评论综合关注度', '结果', `<span class="cockpit-card-actions"><span class="badge">Top 5</span><button class="text-link" data-action="cockpit-hot-more">查看更多帖子 ${icon('arrow-up-right')}</button></span>`)}<div class="cockpit-hot-list">${hotRows.map((item, index) => `<button class="cockpit-hot-row" data-action="cockpit-post-detail" data-id="${safe(item.post.id)}"><b>${index + 1}</b><span><strong>${safe(item.post.title)}</strong><small>${safe(item.post.board)} · 浏览 ${item.engagement.views || 0} · 点赞 ${item.engagement.likes || 0} · 评论 ${item.comments}</small></span><em>${item.score}</em>${icon('chevron-right')}</button>`).join('') || '<p class="muted">暂无热点诉求</p>'}</div></div></div></section>` +
@@ -1678,6 +1752,7 @@
       return showToast(`已切换统计周期：${leaderPeriod}`);
     }
     if (action === 'leader-period-apply') { leaderCustomFrom = document.getElementById('wf-leader-period-from')?.value || ''; leaderCustomTo = document.getElementById('wf-leader-period-to')?.value || ''; if (!leaderCustomFrom || !leaderCustomTo) return showToast('请选择完整的起止日期'); if (leaderCustomFrom > leaderCustomTo) return showToast('开始日期不能晚于结束日期'); leaderPeriod = '自定义'; return render(); }
+    if (action === 'leader-export-excel') return exportLeaderAffairDetail();
     if (action === 'trace-new') { state.modal = { type: action, id }; return render(); }
     if (action === 'trace-query-detail' || action === 'trace-review-detail') { state.modal = { type: 'trace-detail', id }; return render(); }
     if (action === 'trace-submit') {
@@ -2375,7 +2450,7 @@
     const trigger = event.target.closest('[data-action]');
     if (!trigger) return;
     if (trigger.classList.contains('modal-backdrop') && event.target !== trigger) return;
-    if (!canEdit() && !['close', 'nav', 'staff', 'post-detail', 'post-detail-tab', 'cockpit-post-detail', 'affair-detail', 'affair-topic-view', 'cockpit-topic-workbench', 'echo-view', 'cockpit-jump', 'cockpit-hot-more', 'cockpit-hot-list', 'cockpit-hot-prev', 'cockpit-hot-next', 'leader-period-set', 'leader-period-apply'].includes(trigger.dataset.action)) return showToast('领导视图仅支持查看');
+    if (!canEdit() && !['close', 'nav', 'staff', 'post-detail', 'post-detail-tab', 'cockpit-post-detail', 'affair-detail', 'affair-topic-view', 'cockpit-topic-workbench', 'echo-view', 'cockpit-jump', 'cockpit-hot-more', 'cockpit-hot-list', 'cockpit-hot-prev', 'cockpit-hot-next', 'leader-period-set', 'leader-period-apply', 'leader-export-excel'].includes(trigger.dataset.action)) return showToast('领导视图仅支持查看');
     act(trigger.dataset.action, trigger.dataset.id || '');
   });
   window.ManagementWorkflow = {
